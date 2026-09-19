@@ -93,8 +93,8 @@ public final class ClientOps {
         ops.now("info", "{}", "Version, mods, window, whether a world is loaded.", args -> info(client));
 
         ops.now("screen", "{slots?: true, empty_slots?: false, widgets?: true}",
-                "The open screen as data: class, title, size, widgets (index, kind, text, x, y, w, h, visible, "
-                        + "active), and for a container its slots, cursor stack and a merchant's offers.",
+                "The open screen as data: class, title, size, widgets (index, kind, text, x, y, w, h, text_w, "
+                        + "visible, active), and for a container its slots, cursor stack and a merchant's offers.",
                 args -> screen(client, args));
 
         ops.now("player", "{inventory?: false}", "Position, dimension, game mode, health, held item.",
@@ -339,6 +339,10 @@ public final class ClientOps {
                 one.addProperty("y", widget.getY());
                 one.addProperty("w", widget.getWidth());
                 one.addProperty("h", widget.getHeight());
+                // How wide its text is drawn. Wider than the widget is a label
+                // the player sees cut off or scrolling, which no other field
+                // here would show: the first screenshot of a real mod had one.
+                one.addProperty("text_w", client.textRenderer.getWidth(widget.getMessage()));
                 if (!widget.visible) {
                     one.addProperty("visible", false);
                 }
