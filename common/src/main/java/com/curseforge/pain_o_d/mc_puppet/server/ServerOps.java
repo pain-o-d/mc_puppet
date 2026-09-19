@@ -104,6 +104,9 @@ public final class ServerOps {
         info.addProperty("side", "server");
         info.addProperty("minecraft", server.getVersion());
         info.addProperty("dedicated", server.isDedicated());
+        // The save's folder, which is what open_world takes: a scenario that leaves a world can come back to it.
+        java.nio.file.Path save = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT).toAbsolutePath().normalize();
+        info.addProperty("world_name", save.getFileName() == null ? null : save.getFileName().toString());
         info.addProperty("ticks", server.getTicks());
         info.addProperty("ms_per_tick", Math.round(server.getAverageNanosPerTick() / 10_000.0) / 100.0);
         info.addProperty("players", server.getCurrentPlayerCount());
