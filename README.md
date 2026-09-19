@@ -197,6 +197,10 @@ mining is between the key and its effect, and that is the part exercised.
   `lt` `lte`, `exists`. A failure says what was there instead.
 - **`save`** keeps an answer; `"${name.path}"` anywhere later reuses it, and a
   string that is *only* a reference keeps the value's type.
+- **Nesting and `let`:** references resolve innermost first,
+  `${wallet.coins[item=${counter.offers[0].buy.id}].units}`, and a step that is
+  `{"let": {"price": "${= offer.count * coin}"}}` calls nothing and names a
+  value for the steps after it.
 - **Arithmetic:** `"${= before.coins - price.count * 2}"` — `+ - * / %`,
   brackets, `min max floor ceil round abs` over saved values. Read by a
   small parser, never `eval`: a scenario is a file someone downloaded.
