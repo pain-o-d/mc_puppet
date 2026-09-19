@@ -22,7 +22,8 @@
  * it and the next run does not fail for that reason.
  *
  * A step that is {"let": {"name": value}} calls nothing: it gives a name to a
- * value or a sum, for the steps after it to use.
+ * value or a sum, for the steps after it to use, and may "expect" of what it
+ * named as of any answer.
  *
  * A step with "eventually": true (or a number of milliseconds) is asked again
  * until its expectations hold. For one expectation on one answer the game's
@@ -342,8 +343,16 @@ async function runStep(puppet, step, saved, options, entry) {
     // Names for what the steps after it keep saying: {"let": {"price": "${= offer.count * coin.units}"}}.
     try {
       for (const [name, value] of Object.entries(step.let)) saved[name] = substitute(value, saved);
-      entry.ok = true;
-      if (step.show) entry.shown = Object.fromEntries(Object.keys(step.let).map((name) => [name, saved[name]]));
+      const named = Object.fromEntries(Object.keys(step.let).map((name) => [name, saved[name]]));
+      // What was worked out can be expected of, like any answer: {"path": "change", "gte": 0}.
+      const problems = [];
+      for (const expectation of step.expect || []) {
+        const problem = check(substitute(expectation, saved), named);
+        if (problem) problems.push(problem);
+      }
+      entry.ok = problems.length === 0;
+      if (!entry.ok) entry.problems = problems;
+      if (step.show || !entry.ok) entry.shown = named;
     } catch (failure) {
       entry.ok = false;
       entry.problems = [failure.message];

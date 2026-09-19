@@ -381,3 +381,14 @@ test("references nest, and let gives a name to what the steps after it keep sayi
   assert.equal(report.steps[5].ok, false);
   assert.match(report.steps[5].problems[0], /nothing was saved as "nothing"/);
 });
+
+test("what let works out can be expected of, and a failure shows the sums", async () => {
+  const report = await run(scripted({}), { steps: [
+    { let: { before: 2000, after: 400, price: 800 } },
+    { let: { spent: "${= before - after}" }, expect: [{ path: "spent", equals: "${= 2 * price}" }] },
+    { let: { lost: "${= before - after - 2 * price - 1}" }, expect: [{ path: "lost", gte: 0 }] } ] }, { keepGoing: true });
+  assert.equal(report.steps[1].ok, true);
+  assert.equal(report.steps[2].ok, false);
+  assert.match(report.steps[2].problems[0], /"lost" is -1, expected gte 0/);
+  assert.deepEqual(report.steps[2].shown, { lost: -1 });
+});

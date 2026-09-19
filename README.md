@@ -200,7 +200,7 @@ mining is between the key and its effect, and that is the part exercised.
 - **Nesting and `let`:** references resolve innermost first,
   `${wallet.coins[item=${counter.offers[0].buy.id}].units}`, and a step that is
   `{"let": {"price": "${= offer.count * coin}"}}` calls nothing and names a
-  value for the steps after it.
+  value for the steps after it; it may `expect` of what it named.
 - **Arithmetic:** `"${= before.coins - price.count * 2}"` — `+ - * / %`,
   brackets, `min max floor ceil round abs` over saved values. Read by a
   small parser, never `eval`: a scenario is a file someone downloaded.
