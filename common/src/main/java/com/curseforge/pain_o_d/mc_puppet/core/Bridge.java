@@ -56,6 +56,7 @@ public final class Bridge implements AutoCloseable {
     private final String token;
     private final ServerSocket socket;
     private final Path endpointFile;
+    private final Audit audit;
     private final Set<Socket> connections = ConcurrentHashMap.newKeySet();
     private final AtomicInteger threadNumber = new AtomicInteger();
     private volatile boolean closed;
@@ -66,6 +67,7 @@ public final class Bridge implements AutoCloseable {
         this.token = token;
         this.socket = socket;
         this.endpointFile = endpointFile;
+        this.audit = new Audit(endpointFile.getParent(), side);
     }
 
     /**
@@ -180,9 +182,11 @@ public final class Bridge implements AutoCloseable {
                             + endpointFile.getFileName()));
                     return;
                 }
+                long asked = System.currentTimeMillis();
                 ops.run(request.op(), request.args())
                         .orTimeout(Waiter.MAX_TIMEOUT_MS + 5_000, TimeUnit.MILLISECONDS)
                         .whenComplete((result, failure) -> {
+                            audit.wrote(request.op(), request.args(), failure, System.currentTimeMillis() - asked);
                             try {
                                 write(out, failure == null
                                         ? Protocol.ok(request.id(), result)

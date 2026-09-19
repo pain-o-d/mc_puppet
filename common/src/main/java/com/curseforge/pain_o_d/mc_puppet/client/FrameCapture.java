@@ -43,6 +43,29 @@ public final class FrameCapture {
         final JsonArray items = new JsonArray();
         final JsonArray sprites = new JsonArray();
         final JsonArray tooltips = new JsonArray();
+
+        /**
+         * Which texts the open screen drew: from the first of these to before
+         * the second. Before them is the HUD, which the screen covers; after
+         * them toasts and the like, which cover the screen. -1 with no screen.
+         */
+        int screenFrom = -1;
+        int screenTo = -1;
+
+        String layerOf(int index) {
+            if (screenFrom < 0 || index < screenFrom) {
+                return "hud";
+            }
+            return screenTo >= 0 && index >= screenTo ? "overlay" : "screen";
+        }
+
+        /** What a test of layout is about: the screen's own texts when one is open, else all of them. */
+        List<Layout.Box> textsToJudge() {
+            if (screenFrom < 0) {
+                return texts;
+            }
+            return texts.subList(screenFrom, screenTo < 0 ? texts.size() : screenTo);
+        }
     }
 
     /** Asked for, not yet begun: begins with the next frame, so that it is a whole one. */
@@ -83,6 +106,16 @@ public final class FrameCapture {
 
     public static boolean active() {
         return active;
+    }
+
+    public static void screenBegins() {
+        if (recording.screenFrom < 0) {
+            recording.screenFrom = recording.texts.size();
+        }
+    }
+
+    public static void screenEnds() {
+        recording.screenTo = recording.texts.size();
     }
 
     public static void text(DrawContext context, TextRenderer renderer, String text, int x, int y, int colour) {
@@ -163,6 +196,7 @@ public final class FrameCapture {
             json.addProperty("w", Layout.round(box.w()));
             json.addProperty("h", Layout.round(box.h()));
             json.addProperty("colour", String.format("#%06x", frame.colours.get(index) & 0xFFFFFF));
+            json.addProperty("layer", frame.layerOf(index));
             texts.add(json);
         }
         return texts;

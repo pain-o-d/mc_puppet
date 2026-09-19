@@ -77,16 +77,36 @@ after it rests on it.
 
 ## Phase 3 — writing tests faster, and in more places
 
-- [ ] **Recording**: play through by hand once, get the scenario.
-- [ ] **An API for mods**: a mod registers operations of its own, so a test
+- [x] **Recording**: play through by hand once, get the scenario. Verified in
+      a game on both loaders with input sent by a program; not yet with a
+      person's hands on the mouse, which goes through the same events.
+- [x] **An API for mods**: a mod registers operations of its own, so a test
       reads its state as data instead of parsing what a command printed.
-- [ ] **More than one game**: two clients in one scenario, by name.
-- [ ] **JUnit XML** from the runner, for CI.
-- [ ] **Golden screenshots**: compare with a kept image within a tolerance,
-      so layout regressions are caught without anyone looking.
-- [ ] **`launch` and `stop`** from the CLI.
-- [ ] **An audit trail**: every operation logged at debug, so what an agent
+      Unit-tested; **no mod has used it in a running game yet.**
+- [x] **More than one game**: two clients in one scenario, by name.
+      Unit-tested; **two games have not been run side by side yet.**
+- [x] **JUnit XML** from the runner, for CI.
+- [x] **Golden screenshots**: compare with a kept image within a tolerance,
+      so layout regressions are caught without anyone looking. Unit-tested
+      against real PNG data; no golden is kept in this repository, since one
+      holds for one machine's window and language.
+- [x] **`launch` and `stop`** from the CLI. The first `launch` hung the
+      game: it asked for a world the second the bridge opened, while the
+      client was still loading its resources. The bridge now opens when the
+      game can be used. **A tool that is faster than a person finds what a
+      person's pauses were hiding.**
+- [x] **An audit trail**: every operation logged at debug, so what an agent
       did can be read back.
+
+## What the phases taught
+
+- Run both loaders. Each phase had something only NeoForge showed.
+- A flaky step is a finding, not a nuisance. `frame` reported issues one run
+  in ten; the cause was chat and a tutorial toast, drawn under and over the
+  screen. Guessing fixed nothing; making a failed step show what it saw did.
+  Frames now have layers, and a screen is judged by what it drew itself.
+- A check on `entities[0]` passes until the world has an entity of its own.
+  Name the thing that was acted on.
 
 ## Not planned, and why
 

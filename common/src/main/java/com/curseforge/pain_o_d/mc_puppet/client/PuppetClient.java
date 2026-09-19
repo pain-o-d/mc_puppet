@@ -5,6 +5,7 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.curseforge.pain_o_d.mc_puppet.api.PuppetApi;
 import com.curseforge.pain_o_d.mc_puppet.core.Bridge;
 import com.curseforge.pain_o_d.mc_puppet.core.EventLog;
 import com.curseforge.pain_o_d.mc_puppet.core.Ops;
@@ -23,16 +24,23 @@ import dev.architectury.platform.Platform;
 /**
  * The client's bridge. Nothing on a dedicated server may load this class.
  *
- * <p>Opened when the client has started rather than when the mod initialises:
- * until then there is no window, no render thread taking work and nothing to
- * look at, and a test that connected early would be told so for every
- * operation it tried.
+ * <p>Opened when the game can be used, which is later than when it has
+ * started: after "started" the client is still loading its resources behind
+ * the splash, and work handed to it then runs from inside that loading. A
+ * world opened from there never finishes opening - the first launch driven
+ * by a program rather than a person did exactly that, the same second the
+ * bridge appeared, and hung. So the bridge opens on the first tick with no
+ * loading overlay up, and a test that waits for the bridge has waited for
+ * the game.
  */
 public final class PuppetClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("mc_puppet");
 
     private static volatile Bridge bridge;
+
+    /** Tried once and failed: said once, not once a tick. */
+    private static boolean gaveUp;
 
     private PuppetClient() {
     }
@@ -52,8 +60,12 @@ public final class PuppetClient {
             return CompoundEventResult.pass();
         });
         ClientTickEvent.CLIENT_POST.register(client -> waiter.tick());
+        Recorder.init();
 
-        ClientLifecycleEvent.CLIENT_STARTED.register(client -> {
+        ClientTickEvent.CLIENT_POST.register(client -> {
+            if (bridge != null || gaveUp || client.getOverlay() != null) {
+                return;
+            }
             try {
                 // A test runs behind other windows. Vanilla opens the pause menu
                 // when its window loses focus, and every step in the world then
@@ -69,8 +81,10 @@ public final class PuppetClient {
                     EventLog.CLIENT.add("sound", sound.getId().toString(), more);
                 });
                 Ops ops = ClientOps.create(client, waiter, chat);
+                PuppetApi.attach(PuppetApi.Side.CLIENT, ops);
                 bridge = Bridge.open("client", ops, config.clientPort(), Platform.getGameFolder());
             } catch (IOException | RuntimeException failure) {
+                gaveUp = true;
                 LOGGER.error("MC Puppet could not open its client bridge", failure);
             }
         });

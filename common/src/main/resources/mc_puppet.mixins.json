@@ -15,6 +15,7 @@
     "MerchantScreenAccessor",
     "MinecraftClientInvoker",
     "MouseInvoker",
+    "ScreenMixin",
     "SliderWidgetAccessor",
     "SystemToastAccessor",
     "ToastManagerMixin"

@@ -51,6 +51,8 @@ public final class McPuppet {
         LifecycleEvent.SERVER_STARTED.register(server -> {
             try {
                 Ops ops = ServerOps.create(server, SERVER_WAITER);
+                com.curseforge.pain_o_d.mc_puppet.api.PuppetApi.attach(
+                        com.curseforge.pain_o_d.mc_puppet.api.PuppetApi.Side.SERVER, ops);
                 serverBridge = Bridge.open("server", ops, config.serverPort(), Platform.getGameFolder());
             } catch (IOException | RuntimeException failure) {
                 LOGGER.error("MC Puppet could not open its server bridge", failure);

@@ -283,6 +283,7 @@ public final class ClientOps {
                 args -> createWorld(client, args));
 
         ops.now("open_world", "{name}", "Starts a saved world. Follow with wait {for: world}.", args -> {
+            requireLoaded(client);
             String name = Args.string(args, "name");
             if (!Files.isDirectory(client.getLevelStorage().getSavesDirectory().resolve(name))) {
                 throw new Ops.Refused("no saved world in a folder called " + name);
@@ -320,10 +321,36 @@ public final class ClientOps {
                 args -> window(client, args));
 
         ops.add("wait",
-                "{for: screen|no_screen|world|no_world|chat|ticks, value?: text|n, since?: seq, timeout_ms?: 30000}",
+                "{for: screen|no_screen|world|no_world|loaded|chat|ticks, value?: text|n, since?: seq, timeout_ms?: 30000}",
                 "Waits, from the game's tick: for a screen (value: part of its class or title), for none, for a "
                         + "world to be playable, for none, for a chat line containing value, or for so many ticks.",
                 args -> waitFor(client, waiter, chat, args));
+
+        ops.now("record_start", "{}",
+                "Starts writing down what the player does in screens, in a scenario's words: widgets by their "
+                        + "text, slots by number with the modifiers held, screens by a name that survives a "
+                        + "release build, and the entity or block used to open one.",
+                args -> {
+                    Recorder.start();
+                    return JsonNull.INSTANCE;
+                });
+
+        ops.now("record_stop", "{name?: recorded}",
+                "Stops, and returns what was done as a scenario: steps without expectations, which are the "
+                        + "author's to add.",
+                args -> {
+                    if (!Recorder.recording()) {
+                        throw new Ops.Refused("nothing is being recorded; record_start first");
+                    }
+                    return Recorder.stop(Args.string(args, "name", "recorded"));
+                });
+
+        ops.now("record_status", "{}", "Whether a recording is running, and how many steps it has.", args -> {
+            JsonObject json = new JsonObject();
+            json.addProperty("recording", Recorder.recording());
+            json.addProperty("steps", Recorder.count());
+            return json;
+        });
 
         Sight.register(ops, client, waiter);
         Body.register(ops, client, waiter);
@@ -706,7 +733,19 @@ public final class ClientOps {
         return names;
     }
 
+    /**
+     * A world is not opened from inside a resource reload: the client would
+     * wait for a server that is waiting for it. F3+T in the middle of a test
+     * is enough to get here.
+     */
+    private static void requireLoaded(MinecraftClient client) throws Ops.Refused {
+        if (client.getOverlay() != null) {
+            throw new Ops.Refused("the game is loading its resources; wait {for: loaded} first");
+        }
+    }
+
     private static JsonElement createWorld(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        requireLoaded(client);
         if (client.world != null) {
             throw new Ops.Refused("a world is loaded; leave_world first");
         }
@@ -772,6 +811,10 @@ public final class ClientOps {
                 return waiter.until("a world to be playable", timeout,
                         () -> client.world != null && client.player != null && client.currentScreen == null
                                 ? new JsonPrimitive(client.player.getGameProfile().getName()) : null);
+            case "loaded":
+                // After a resource reload (F3+T, a resource pack), until the splash is gone.
+                return waiter.until("the game to finish loading its resources", timeout,
+                        () -> client.getOverlay() == null ? new JsonPrimitive(true) : null);
             case "no_world":
                 return waiter.until("the world to be left", timeout,
                         () -> client.world == null && client.currentScreen instanceof TitleScreen
@@ -786,7 +829,7 @@ public final class ClientOps {
                 return waiter.until(ticks + " tick(s)", Math.max(timeout, ticks * 100L),
                         () -> --left[0] < 0 ? new JsonPrimitive(ticks) : null);
             default:
-                throw new Ops.Refused("\"for\" is one of screen, no_screen, world, no_world, chat, ticks");
+                throw new Ops.Refused("\"for\" is one of screen, no_screen, world, no_world, loaded, chat, ticks");
         }
     }
 
