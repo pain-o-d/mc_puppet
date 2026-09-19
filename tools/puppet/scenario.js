@@ -28,7 +28,8 @@
  * A step with "eventually": true (or a number of milliseconds) is asked again
  * until its expectations hold. For one expectation on one answer the game's
  * own wait_until is exact to the tick and one round trip; "eventually" is for
- * the rest: several expectations at once, or a value saved earlier.
+ * the rest: several expectations at once, a value saved earlier, or - with
+ * "every_ms" - an operation too costly to be asked twenty times a second.
  *
  * While a scenario runs the game's log is read, and an error logged during it
  * fails it: a test that passes while the game throws behind it has not passed.
@@ -364,8 +365,11 @@ async function runStep(puppet, step, saved, options, entry) {
   if (step.eventually) {
     const patience = step.eventually === true ? EVENTUALLY_MS : Number(step.eventually);
     let asked = 1;
+    // "every_ms" for an operation that is work for the game to answer: asked ten times a
+    // second, a costly one slows the very thing being waited for.
+    const pause = step.every_ms ? Math.max(ASK_AGAIN_MS, Number(step.every_ms)) : ASK_AGAIN_MS;
     while (problems.length && Date.now() - started < patience && !gameIsGone(problems)) {
-      await sleep(ASK_AGAIN_MS);
+      await sleep(pause);
       problems = await attempt(puppet, side, step, saved, entry, options);
       asked++;
     }

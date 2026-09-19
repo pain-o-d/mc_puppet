@@ -206,7 +206,9 @@ mining is between the key and its effect, and that is the part exercised.
   small parser, never `eval`: a scenario is a file someone downloaded.
 - **`eventually`**: `true` (10s) or milliseconds — the step is asked again
   until its expectations hold. For one expectation `wait_until` is exact to
-  the tick; `eventually` is for several at once.
+  the tick; `eventually` is for several at once, and with `"every_ms": 5000`
+  for an operation that is work for the game to answer: `wait_until` asks
+  every tick, and a costly question asked that often slows what it waits for.
 - **The log is part of the result.** A scenario fails if the game logged an
   `ERROR`, a `FATAL` or a stack trace while it ran, and prints the lines.
   `"allow_log": ["regex"]` lets known ones by; `--no-log` turns it off.
