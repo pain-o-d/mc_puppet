@@ -24,6 +24,8 @@ test("a path walks keys, indexes, filters and counts", () => {
   assert.equal(valueAt(screen, "widgets[text~=currency].x"), 200);
   assert.equal(valueAt(screen, "widgets[text=Done].visible"), false);
   assert.equal(valueAt(screen, "offers[index=1].sell.id"), "minecraft:emerald");
+  assert.equal(valueAt(screen, "offers[sell.id~=bookshelf].buy.count"), 9);
+  assert.equal(valueAt(screen, "offers[sell.nothing=1]"), undefined);
   assert.deepEqual(valueAt(screen, ""), screen);
 });
 

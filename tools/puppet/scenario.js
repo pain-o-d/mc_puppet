@@ -13,7 +13,7 @@
  *         "expect": [ { "path": "offers[0].buy.id", "not": "${before.offers[0].buy.id}" } ] } ] }
  *
  * A path walks the answer: a.b, a[2], a[key=value] and a[key~=part] for the
- * first element that matches, and a# for how many there are. "${name.path}"
+ * first element that matches (the key may be a path: slots[stack.id~=sword]), and a# for how many there are. "${name.path}"
  * anywhere in args or in an expectation is replaced by a value saved earlier,
  * and "${= before.count - 3 * price}" by a sum over them.
  *
@@ -82,7 +82,8 @@ function valueAt(root, path) {
       const wanted = step.value.toLowerCase();
       value = value.find((each) => {
         if (each === null || typeof each !== "object") return false;
-        const held = each[step.filter];
+        // The key may itself be a path: slots[stack.id~=sword].
+        const held = valueAt(each, step.filter);
         if (held === undefined || held === null) return false;
         const text = String(held).toLowerCase();
         return step.partial ? text.includes(wanted) : text === wanted;

@@ -49,31 +49,31 @@ after it rests on it.
 
 ## Phase 2 — eyes and hands
 
-- [ ] **Tooltips as text**: what hovering a slot or a widget shows, with the
+- [x] **Tooltips as text**: what hovering a slot or a widget shows, with the
       lines mods add.
-- [ ] **A frame as data**: every string, item and sprite drawn in one frame,
+- [x] **A frame as data**: every string, item and sprite drawn in one frame,
       with where. A screen draws most of what it shows without widgets — a
       trading screen's prices, its "Trades" heading, the villager's level —
       and until now only a screenshot could see it. With positions, overlap,
       text off the screen and a label too wide for its button are arithmetic.
       Recorded for one frame on request, never otherwise.
-- [ ] **Widget state by kind**: a checkbox's tick, a slider's value, a
+- [x] **Widget state by kind**: a checkbox's tick, a slider's value, a
       cycling button's value; `set_text` and focus.
-- [ ] **The HUD**: action bar, title and subtitle, boss bars, sidebar, status
+- [x] **The HUD**: action bar, title and subtitle, boss bars, sidebar, status
       effects, experience, air, armour.
-- [ ] **An event log**: chat and system messages as before, and the action
+- [x] **An event log**: chat and system messages as before, and the action
       bar, titles, toasts and **sounds**, each numbered. A sound is often a
       mod's only feedback, and no screenshot shows one.
-- [ ] **The world as the client believes it**: a block, a box of blocks, what
+- [x] **The world as the client believes it**: a block, a box of blocks, what
       the crosshair is on, a ray from the eyes, light, biome, time, weather.
       Only the server could be asked, so a client out of step with it could
       not be caught.
-- [ ] **Richer entities**: health, equipment, velocity, vehicle.
-- [ ] **The character**: hold movement keys for so many ticks, look, walk to
+- [x] **Richer entities**: health, equipment, velocity, vehicle.
+- [x] **The character**: hold movement keys for so many ticks, look, walk to
       a place, attack, break a block, use and hold use, drop, swap hands.
       Through the key bindings and the interaction manager, as a player's
       input arrives, not by teleport.
-- [ ] **Performance**: frame rate, frame time, memory.
+- [x] **Performance**: frame rate, frame time, memory.
 
 ## Phase 3 — writing tests faster, and in more places
 

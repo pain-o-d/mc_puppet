@@ -54,6 +54,15 @@ public final class Args {
         return args.has(key) && args.get(key).isJsonPrimitive() ? args.get(key).getAsBoolean() : fallback;
     }
 
+    public static double decimal(JsonObject args, String key, double fallback) throws Ops.Refused {
+        return args.has(key) && !args.get(key).isJsonNull() ? decimal(args, key) : fallback;
+    }
+
+    /** {@code timeout_ms}, or an operation's own idea of how long it may take. */
+    public static long timeout(JsonObject args, long fallback) throws Ops.Refused {
+        return args.has("timeout_ms") ? timeout(args) : fallback;
+    }
+
     public static long timeout(JsonObject args) throws Ops.Refused {
         return number(args, "timeout_ms", Waiter.DEFAULT_TIMEOUT_MS);
     }

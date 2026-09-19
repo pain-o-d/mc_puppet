@@ -4,12 +4,20 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "client": [
+    "BossBarHudAccessor",
+    "DrawContextMixin",
+    "GameRendererMixin",
     "HandledScreenAccessor",
+    "InGameHudAccessor",
+    "InGameHudMixin",
     "InputUtilMixin",
     "KeyboardInvoker",
     "MerchantScreenAccessor",
     "MinecraftClientInvoker",
-    "MouseInvoker"
+    "MouseInvoker",
+    "SliderWidgetAccessor",
+    "SystemToastAccessor",
+    "ToastManagerMixin"
   ],
   "mixins": [],
   "injectors": {

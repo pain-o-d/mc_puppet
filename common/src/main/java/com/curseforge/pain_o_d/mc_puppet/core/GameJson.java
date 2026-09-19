@@ -139,6 +139,34 @@ public final class GameJson {
         if (entity.hasCustomName()) {
             json.addProperty("name", entity.getName().getString());
         }
+        json.addProperty("yaw", Math.round(entity.getYaw() * 10) / 10.0);
+        json.addProperty("pitch", Math.round(entity.getPitch() * 10) / 10.0);
+        json.add("velocity", pos(entity.getVelocity()));
+        json.addProperty("on_ground", entity.isOnGround());
+        if (entity.getVehicle() != null) {
+            json.addProperty("vehicle", entity.getVehicle().getUuidAsString());
+        }
+        if (entity.hasPassengers()) {
+            JsonArray riders = new JsonArray();
+            entity.getPassengerList().forEach(rider -> riders.add(rider.getUuidAsString()));
+            json.add("passengers", riders);
+        }
+        if (entity instanceof net.minecraft.entity.LivingEntity living) {
+            json.addProperty("health", living.getHealth());
+            json.addProperty("max_health", living.getMaxHealth());
+            JsonObject equipment = new JsonObject();
+            for (net.minecraft.entity.EquipmentSlot slot : net.minecraft.entity.EquipmentSlot.values()) {
+                if (!living.getEquippedStack(slot).isEmpty()) {
+                    equipment.add(slot.getName(), stack(living.getEquippedStack(slot)));
+                }
+            }
+            if (equipment.size() > 0) {
+                json.add("equipment", equipment);
+            }
+        }
+        if (entity instanceof net.minecraft.entity.ItemEntity dropped) {
+            json.add("stack", stack(dropped.getStack()));
+        }
         if (entity instanceof VillagerEntity villager) {
             json.addProperty("profession",
                     Registries.VILLAGER_PROFESSION.getId(villager.getVillagerData().getProfession()).toString());

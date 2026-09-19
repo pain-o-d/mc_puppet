@@ -20,7 +20,8 @@ import com.google.gson.JsonObject;
  * <pre>
  * a.b            a key
  * a[2]  a[-1]    an index, from either end
- * a[key=value]   the first element whose key is that value, ignoring case
+ * a[key=value]   the first element whose key is that value, ignoring case;
+ *                the key may be a path: slots[stack.id=minecraft:emerald]
  * a[key~=part]   … whose key contains that
  * a#             how many
  * </pre>
@@ -96,11 +97,12 @@ public final class Expect {
         String key = inside.substring(0, at).trim();
         String wanted = inside.substring(at + (partial ? 2 : 1)).toLowerCase(Locale.ROOT);
         for (JsonElement each : array) {
-            if (!each.isJsonObject() || !each.getAsJsonObject().has(key)
-                    || each.getAsJsonObject().get(key).isJsonNull()) {
+            // The key may itself be a path: slots[stack.id~=sword].
+            JsonElement found = each.isJsonObject() ? at(each, key) : null;
+            if (found == null || found.isJsonNull()) {
                 continue;
             }
-            String held = text(each.getAsJsonObject().get(key)).toLowerCase(Locale.ROOT);
+            String held = text(found).toLowerCase(Locale.ROOT);
             if (partial ? held.contains(wanted) : held.equals(wanted)) {
                 return each;
             }
