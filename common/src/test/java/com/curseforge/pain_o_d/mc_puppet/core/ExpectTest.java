@@ -55,6 +55,7 @@ class ExpectTest {
             assertEquals(10, Expect.at(screen, "widgets[text=done].x").getAsInt());
             assertEquals(200, Expect.at(screen, "widgets[text~=pay in].x").getAsInt());
             assertEquals("minecraft:emerald", Expect.at(screen, "slots[index=1].stack.item").getAsString());
+            assertEquals(1, Expect.at(screen, "slots[stack.item~=emerald].index").getAsInt());
         }
 
         @Test

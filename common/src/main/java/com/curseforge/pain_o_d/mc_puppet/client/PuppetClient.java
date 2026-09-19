@@ -6,9 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.curseforge.pain_o_d.mc_puppet.core.Bridge;
+import com.curseforge.pain_o_d.mc_puppet.core.EventLog;
 import com.curseforge.pain_o_d.mc_puppet.core.Ops;
 import com.curseforge.pain_o_d.mc_puppet.core.PuppetConfig;
 import com.curseforge.pain_o_d.mc_puppet.core.Waiter;
+
+import com.google.gson.JsonObject;
 
 import dev.architectury.event.CompoundEventResult;
 import dev.architectury.event.events.client.ClientChatEvent;
@@ -39,10 +42,12 @@ public final class PuppetClient {
         ChatLog chat = new ChatLog();
 
         ClientSystemMessageEvent.RECEIVED.register(message -> {
+            EventLog.CLIENT.add("system", message.getString());
             chat.add(true, message.getString());
             return CompoundEventResult.pass();
         });
         ClientChatEvent.RECEIVED.register((type, message) -> {
+            EventLog.CLIENT.add("chat", message.getString());
             chat.add(false, message.getString());
             return CompoundEventResult.pass();
         });
@@ -54,6 +59,15 @@ public final class PuppetClient {
                 // when its window loses focus, and every step in the world then
                 // meets a screen nobody opened. Not written to options.txt.
                 client.options.pauseOnLostFocus = false;
+                // A sound is often all a mod does to say that something worked.
+                client.getSoundManager().registerListener((sound, set, range) -> {
+                    JsonObject more = new JsonObject();
+                    more.addProperty("category", sound.getCategory().getName());
+                    more.addProperty("x", Math.round(sound.getX() * 10) / 10.0);
+                    more.addProperty("y", Math.round(sound.getY() * 10) / 10.0);
+                    more.addProperty("z", Math.round(sound.getZ() * 10) / 10.0);
+                    EventLog.CLIENT.add("sound", sound.getId().toString(), more);
+                });
                 Ops ops = ClientOps.create(client, waiter, chat);
                 bridge = Bridge.open("client", ops, config.clientPort(), Platform.getGameFolder());
             } catch (IOException | RuntimeException failure) {

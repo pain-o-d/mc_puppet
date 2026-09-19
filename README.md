@@ -81,8 +81,11 @@ In short:
 | Client | |
 |---|---|
 | `info` `screen` `player` `count` `chat` `entities` `screenshot` | seeing |
+| `frame` `tooltip` `hud` `events` | seeing what is not a widget |
+| `block` `blocks` `target` `raycast` `world` `perf` `bindings` | the world as the client has it |
 | `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
-| `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
+| `look` `hold` `tap` `move_to` `attack` `break_block` `stop` | the character |
+| `set_text` `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
 | `worlds` `create_world` `open_world` `leave_world` `window` `quit` `wait` | getting there |
 
 | Server | |
@@ -122,6 +125,46 @@ merchant the offers *as displayed* (with discounts and demand applied) and
 which one is selected. Coordinates are scaled GUI pixels, the same space
 widgets live in, so "is this button outside the panel?" is arithmetic.
 
+### Seeing without a screenshot
+
+A screen draws most of what it shows without widgets: a trading screen's
+prices, its heading, a HUD overlay. `frame` records the drawing calls of the
+next frame — every string with where it landed and how wide, every item, every
+tooltip, on request every sprite — with the transform in force applied, so a
+scaled heading or a tooltip is where the player sees it:
+
+```json
+{ "op": "frame", "args": { "contains": "cents" },
+  "expect": [ { "path": "texts[0].x", "gte": 0 }, { "path": "issues#", "equals": 0 } ] }
+```
+
+`issues` is the part of looking at a screenshot that is arithmetic: text that
+runs **off the screen**, text drawn **over other text**, and a **label wider
+than its widget**. Nothing is recorded unless asked, and then for one frame.
+
+`tooltip {slot|widget|x,y}` hovers and returns the lines the game then
+draws, with what mods add. `hud` is the action bar, title, boss bars, sidebar,
+effects, health, food, air, experience. `events` is what was over before
+anyone could look — messages, the action bar, titles, toasts and **sounds** —
+numbered, so a test takes `sequence` before acting and asks `since` it after:
+a sound is often all a mod does to say that something worked.
+
+`block`, `blocks`, `target`, `raycast` and `world` read the world as the
+*client* believes it. Ask the server the same and a client out of step with it
+is caught.
+
+### The character
+
+`hold {keys: [forward, sneak], ticks: 20}` holds the game's own key bindings —
+any binding by name, mods' included (`bindings` lists them) — and `tap`
+presses one once, whatever key it is bound to. `look` turns the head and
+answers with what the crosshair is then on. `move_to` faces a place and walks
+there, jumping when blocked; it does not find paths. `attack` is the game's own
+attack on what the crosshair is on, and `break_block` holds it on a block for
+as long as that takes with what is in hand — dirt by hand is fifteen ticks, and
+a test can say so. None of it teleports: what a mod does to movement, reach or
+mining is between the key and its effect, and that is the part exercised.
+
 ## Scenarios
 
 ```json
@@ -145,7 +188,8 @@ widgets live in, so "is this button outside the panel?" is arithmetic.
 - A step is `{side?, op, args?, expect?, save?, show?, expect_error?, optional?, eventually?, note?}`.
   `side` defaults to `client`.
 - **Paths:** `a.b`, `a[2]`, `a[-1]`, `a[key=value]`, `a[key~=part]` (first
-  match, case-insensitive), `a#` (count). No path means the whole answer.
+  match, case-insensitive; the key may be a path, `slots[stack.id~=sword]`),
+  `a#` (count). No path means the whole answer.
 - **Expectations:** `equals`, `not`, `contains`, `matches` (regex), `gt` `gte`
   `lt` `lte`, `exists`. A failure says what was there instead.
 - **`save`** keeps an answer; `"${name.path}"` anywhere later reuses it, and a
@@ -167,7 +211,9 @@ widgets live in, so "is this button outside the panel?" is arithmetic.
   it drops into CI.
 
 `scenarios/trade-with-a-villager.json` is a worked example that checks a trade
-from both sides of the game and cleans up after itself.
+from both sides of the game and cleans up after itself;
+`scenarios/eyes-and-hands.json` walks, breaks a block, hits a pig, and reads a
+tooltip, the action bar, a sound and a frame. Both pass on Fabric and NeoForge.
 
 ## For AI coding agents (MCP)
 
@@ -216,7 +262,11 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
 
 ## Limits
 
-- A screenshot is the last rendered frame: the window must not be minimised.
+- A screenshot is the last rendered frame, and `frame` and `tooltip` need one
+  drawn: the window must not be minimised. Behind other windows is fine.
+- `frame` sees what goes through `DrawContext`. A mod that draws with its own
+  vertex buffers is pixels only; an item's count is on the item, not a text.
+- `move_to` does not find paths. Build the test world flat, or walk in legs.
 - Input enters at the game's own mouse and keyboard handlers, not through the
   OS: a mod that registers its own GLFW callback does not hear it. The real
   mouse still works, and moving it over the window during a test moves the

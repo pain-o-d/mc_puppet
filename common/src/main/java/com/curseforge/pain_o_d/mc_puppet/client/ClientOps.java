@@ -16,6 +16,7 @@ import com.curseforge.pain_o_d.mc_puppet.core.Ops;
 import com.curseforge.pain_o_d.mc_puppet.core.Waiter;
 import com.curseforge.pain_o_d.mc_puppet.mixin.HandledScreenAccessor;
 import com.curseforge.pain_o_d.mc_puppet.mixin.MerchantScreenAccessor;
+import com.curseforge.pain_o_d.mc_puppet.mixin.SliderWidgetAccessor;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
@@ -35,6 +36,7 @@ import net.minecraft.client.gui.screen.ingame.MerchantScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.CheckboxWidget;
 import net.minecraft.client.gui.widget.ClickableWidget;
+import net.minecraft.client.gui.widget.CyclingButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -204,6 +206,19 @@ public final class ClientOps {
                     });
                 });
 
+        ops.now("set_text", "{widget: index|text, text}",
+                "Focuses a text field and sets what it holds, as if typed over: its listeners hear it. For a "
+                        + "field among several; \"type\" goes to whichever has focus.",
+                args -> {
+                    Screen screen = requireScreen(client);
+                    if (!(widgetBy(screen, Args.string(args, "widget")) instanceof TextFieldWidget field)) {
+                        throw new Ops.Refused("that widget is not a text field");
+                    }
+                    screen.setFocused(field);
+                    field.setText(Args.string(args, "text"));
+                    return new JsonPrimitive(field.getText());
+                });
+
         ops.now("release_keys", "{}", "Lets go of every key a test is holding.", args -> {
             VirtualKeys.releaseAll();
             return JsonNull.INSTANCE;
@@ -310,6 +325,8 @@ public final class ClientOps {
                         + "world to be playable, for none, for a chat line containing value, or for so many ticks.",
                 args -> waitFor(client, waiter, chat, args));
 
+        Sight.register(ops, client, waiter);
+        Body.register(ops, client, waiter);
         return ops;
     }
 
@@ -370,6 +387,9 @@ public final class ClientOps {
         if (widget instanceof SliderWidget) {
             return "slider";
         }
+        if (widget instanceof CyclingButtonWidget) {
+            return "cycling_button";
+        }
         if (widget instanceof ButtonWidget) {
             return "button";
         }
@@ -420,6 +440,21 @@ public final class ClientOps {
                 }
                 if (widget.isFocused()) {
                     one.addProperty("focused", true);
+                }
+                // What a widget is set to, which its text only sometimes says.
+                if (widget instanceof CheckboxWidget checkbox) {
+                    one.addProperty("checked", checkbox.isChecked());
+                } else if (widget instanceof SliderWidget) {
+                    one.addProperty("value", Math.round(((SliderWidgetAccessor) widget).mc_puppet$value() * 1000)
+                            / 1000.0);
+                } else if (widget instanceof CyclingButtonWidget<?> cycling) {
+                    one.addProperty("value", String.valueOf(cycling.getValue()));
+                } else if (widget instanceof TextFieldWidget field) {
+                    one.addProperty("label", widget.getMessage().getString());
+                    one.addProperty("editable", field.isActive());
+                }
+                if (widget.getTooltip() != null) {
+                    one.addProperty("has_tooltip", true);
                 }
                 widgets.add(one);
             }
