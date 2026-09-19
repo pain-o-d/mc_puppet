@@ -348,3 +348,13 @@ test("launch knows a multi-loader project from a single-loader one", () => {
   assert.equal(plan("client", { project: __dirname, loader: "fabric" }).task, "runClient");
   assert.throws(() => plan("both", { project: here, loader: "fabric" }), /client or server/);
 });
+
+test("a step can compare two parts of its own answer", async () => {
+  const button = { widgets: [{ text: "Pay in: Coins", w: 76, text_w: 70 }] };
+  const step = { op: "screen", save: "fit", expect: [{ path: "widgets[0].text_w", lt: "${fit.widgets[0].w}" }] };
+  assert.equal((await run(scripted({ screen: button }), { steps: [step] })).ok, true);
+  button.widgets[0].text_w = 104;
+  const clipped = await run(scripted({ screen: button }), { steps: [step] });
+  assert.equal(clipped.ok, false);
+  assert.match(clipped.steps[0].problems[0], /is 104, expected lt 76/);
+});
