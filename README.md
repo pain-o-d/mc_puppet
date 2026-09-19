@@ -81,7 +81,8 @@ In short:
 | Client | |
 |---|---|
 | `info` `screen` `player` `count` `chat` `entities` `screenshot` | seeing |
-| `click_widget` `click_at` `click_slot` `select_trade` `key` `type` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
+| `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
+| `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
 | `worlds` `create_world` `open_world` `leave_world` `window` `quit` `wait` | getting there |
 
 | Server | |
@@ -90,7 +91,30 @@ In short:
 | `command` (captured output, optional `as` a player) | doing |
 | `wait` (ticks, or players online) | |
 
-Both sides: `help`, and `batch` — several steps in one round trip.
+Both sides: `help`; `batch` — several steps in one round trip; and
+`wait_until` — any operation, a path into its answer and an expectation,
+looked at in the game once a tick:
+
+```json
+{ "op": "wait_until", "args": { "op": "screen", "path": "slots[slot=2].stack.id",
+                                "equals": "minecraft:apple", "timeout_ms": 5000 } }
+```
+
+Wait for the thing, never for a number of ticks: "10 ticks" is a guess that
+holds on the machine it was guessed on.
+
+**Input is real input.** `click_widget`, `click_at`, `hover`, `drag`,
+`scroll`, `key` and `type` enter the game where GLFW's callbacks do, so
+the loaders' screen events fire, key bindings work with no screen open (`e`
+opens the inventory), `"modifiers": ["shift"]` makes a shift-click, and a
+drag over slots spreads a stack as it does for a player. A mod that listens
+for a screen event instead of overriding a method is exercised like any other.
+`"direct": true` calls the screen's own method instead, for the odd case.
+
+**Names that survive a release build.** A class name is not one:
+`MerchantScreen` is `class_492` in a shipped jar. `screen` reports a
+container's registered `handler_type` (`minecraft:merchant`) and a title's
+`title_key`, and `wait {for: screen}` matches on those first.
 
 `screen` is the one to know. For a container it returns the panel's bounds,
 every non-empty slot with its on-screen position, the cursor stack, and for a
@@ -115,7 +139,10 @@ widgets live in, so "is this button outside the panel?" is arithmetic.
       "expect": [ { "equals": 5 } ] } ] }
 ```
 
-- A step is `{side?, op, args?, expect?, save?, show?, expect_error?, optional?, note?}`.
+- A scenario is `{name, setup?, steps, teardown?, allow_log?}`. **Teardown
+  always runs**, every step of it, whatever failed before; a failed `setup`
+  skips `steps`.
+- A step is `{side?, op, args?, expect?, save?, show?, expect_error?, optional?, eventually?, note?}`.
   `side` defaults to `client`.
 - **Paths:** `a.b`, `a[2]`, `a[-1]`, `a[key=value]`, `a[key~=part]` (first
   match, case-insensitive), `a#` (count). No path means the whole answer.
@@ -123,6 +150,15 @@ widgets live in, so "is this button outside the panel?" is arithmetic.
   `lt` `lte`, `exists`. A failure says what was there instead.
 - **`save`** keeps an answer; `"${name.path}"` anywhere later reuses it, and a
   string that is *only* a reference keeps the value's type.
+- **Arithmetic:** `"${= before.coins - price.count * 2}"` — `+ - * / %`,
+  brackets, `min max floor ceil round abs` over saved values. Read by a
+  small parser, never `eval`: a scenario is a file someone downloaded.
+- **`eventually`**: `true` (10s) or milliseconds — the step is asked again
+  until its expectations hold. For one expectation `wait_until` is exact to
+  the tick; `eventually` is for several at once.
+- **The log is part of the result.** A scenario fails if the game logged an
+  `ERROR`, a `FATAL` or a stack trace while it ran, and prints the lines.
+  `"allow_log": ["regex"]` lets known ones by; `--no-log` turns it off.
 - **`expect_error`** passes a step that is refused with that text: test that
   the game says no.
 - **`optional`** tries a step and carries on either way — a confirmation
@@ -181,8 +217,12 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
 ## Limits
 
 - A screenshot is the last rendered frame: the window must not be minimised.
-- Clicks go to the screen's own handlers, not through the OS, so anything a
-  mod does in raw input callbacks is not exercised.
+- Input enters at the game's own mouse and keyboard handlers, not through the
+  OS: a mod that registers its own GLFW callback does not hear it. The real
+  mouse still works, and moving it over the window during a test moves the
+  cursor.
+- While the bridge is on, the game does not pause when its window loses focus
+  (a test runs behind other windows). The setting is not saved.
 - `use_entity` and `use_block` are checked by the server like any player's:
   stand within reach.
 - The client bridge reads what the client knows. For the truth, ask the

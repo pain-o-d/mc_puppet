@@ -53,7 +53,7 @@ public final class ServerOps {
     }
 
     public static Ops create(MinecraftServer server, Waiter waiter) {
-        Ops ops = new Ops("server", server::execute);
+        Ops ops = new Ops("server", server::execute, waiter);
 
         ops.now("info", "{}", "Version, mods, players, worlds, tick time.", args -> info(server));
 

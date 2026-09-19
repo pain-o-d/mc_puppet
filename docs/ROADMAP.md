@@ -12,37 +12,40 @@ client, because that is where 0.1.0's own bugs were found.
 The existing operations, made honest. Nothing new to show for it; everything
 after it rests on it.
 
-- [ ] **Input goes through the game's input handlers.** `click_widget`,
+- [x] **Input goes through the game's input handlers.** `click_widget`,
       `click_at`, `key` and `type` called the screen's methods directly. The
       loaders' screen events — Fabric API's, NeoForge's, Architectury's — are
       raised by `Mouse` and `Keyboard`, one level up, so a mod that listens
       for an event rather than overriding a method was **not exercised at
       all**, and its test passed. Input now enters where a real mouse and
       keyboard do. `direct: true` keeps the old path for the odd case.
-- [ ] **Hover, drag, scroll, modifiers, key press and release.** What a
+- [x] **Hover, drag, scroll, modifiers, key press and release.** What a
       tooltip, a split stack, a trade list and a shift-click need.
-- [ ] **The game does not pause when its window loses focus** while the
+- [x] **The game does not pause when its window loses focus** while the
       bridge is on. A test runs behind other windows; vanilla opens the pause
       menu there, and every in-world step then meets a screen nobody opened.
-- [ ] **Names that survive a release build.** A scenario waited for
+- [x] **Names that survive a release build.** A scenario waited for
       `MerchantScreen`, which in a shipped jar is `class_492`. A container
       screen reports its registered handler type (`minecraft:merchant`) and a
       titled screen its translation key; waits match on those.
-- [ ] **`wait_until`: wait for data, not for ticks.** Any operation, a path
+- [x] **`wait_until`: wait for data, not for ticks.** Any operation, a path
       into its answer and an expectation, evaluated in the game each tick.
       The worked scenarios wait "10 ticks" five times; each is a guess.
       Paths and expectations move into the mod's core, tested without a game.
-- [ ] **Scenarios: `setup` / `steps` / `teardown`**, with teardown always
+- [x] **Scenarios: `setup` / `steps` / `teardown`**, with teardown always
       run. Clean-up sat at the end of `steps` and did not happen after a
       failure.
-- [ ] **Arithmetic in expectations:** `"${= before.coins - price.count * 2}"`.
+- [x] **Arithmetic in expectations:** `"${= before.coins - price.count * 2}"`.
       "The purse is lighter by exactly the price" could not be said.
-- [ ] **`eventually`** on a step: retry until its expectations hold.
-- [ ] **The log is part of the result.** A scenario fails if the game logged
+- [x] **`eventually`** on a step: retry until its expectations hold.
+- [x] **The log is part of the result.** A scenario fails if the game logged
       an error or an exception while it ran, and says which; and says so if
       the game died.
-- [ ] **NeoForge is launched**, not just built, and the smoke scenario passes
-      on it.
+- [x] **NeoForge is launched**, not just built, and the smoke scenario passes
+      on it. The first run found what building could not: `select_trade`
+      sent its packet through a method NeoForge replaces, a
+      `NoSuchMethodError` there and nowhere else. **Run both loaders before
+      believing a change to `ClientOps`.**
 
 ## Phase 2 — eyes and hands
 
