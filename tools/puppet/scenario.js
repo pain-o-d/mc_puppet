@@ -242,13 +242,17 @@ function check(expectation, result) {
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /** One step, once. Returns what was wrong with it, as a list that is empty when nothing was. */
-async function attempt(puppet, side, step, saved, entry) {
+async function attempt(puppet, side, step, saved, entry, options = {}) {
   try {
     const args = substitute(step.args || {}, saved);
     const result = await puppet.call(side, step.op, args);
     const problems = [];
     for (const expectation of step.expect || []) {
       const problem = check(substitute(expectation, saved), result);
+      if (problem) problems.push(problem);
+    }
+    if (step.golden) {
+      const problem = compareGolden(step.golden, result, options, entry);
       if (problem) problems.push(problem);
     }
     if (step.expect_error !== undefined) problems.push(`answered, where it should have been refused with "${step.expect_error}"`);
@@ -267,19 +271,63 @@ async function attempt(puppet, side, step, saved, entry) {
   }
 }
 
+/**
+ * A screenshot against a kept one: {"golden": {"file": "golden/trade.png",
+ * "max_percent": 0.5, "tolerance": 16, "region": {x, y, w, h}}} on a step that
+ * answers with a "path", which screenshot does. The file is beside the
+ * scenario. Missing, or with updateGolden, it is written from what was seen,
+ * and the step passes: the first run makes the goldens, a person looks at
+ * them once, and from then on a program does.
+ *
+ * A golden holds for one window size, GUI scale and language. Set the window
+ * in setup, and compare a region when the world shows behind the screen.
+ */
+function compareGolden(golden, result, options, entry) {
+  const fs = options.fs || require("fs");
+  const path = require("path");
+  const png = require("./png");
+  const taken = result && result.path;
+  if (!taken) return "\"golden\" is for a step that answers with a \"path\", as screenshot does";
+  const kept = path.resolve(options.baseDir || ".", golden.file);
+  if (options.updateGolden || !fs.existsSync(kept)) {
+    fs.mkdirSync(path.dirname(kept), { recursive: true });
+    fs.copyFileSync(taken, kept);
+    entry.golden = { written: kept };
+    return null;
+  }
+  let outcome;
+  try {
+    outcome = png.diff(png.decode(fs.readFileSync(kept)), png.decode(fs.readFileSync(taken)), golden);
+  } catch (unreadable) {
+    return `the screenshot could not be compared with ${golden.file}: ${unreadable.message}`;
+  }
+  const allowed = golden.max_percent === undefined ? 0.5 : Number(golden.max_percent);
+  entry.golden = { file: golden.file, percent: outcome.percent, different: outcome.different };
+  if (!outcome.same_size) return `the screenshot is not the size of ${golden.file}: ${outcome.says}. Set the window in setup`;
+  if (outcome.percent <= allowed) return null;
+  const marked = taken.replace(/\.png$/i, "") + ".diff.png";
+  try {
+    fs.writeFileSync(marked, png.encode(outcome.image));
+    entry.golden.diff = marked;
+  } catch (unwritable) {
+    // The number is the finding; the picture is a help.
+  }
+  return `the screenshot differs from ${golden.file} in ${outcome.percent}% of pixels (allowed ${allowed}%); see ${marked}`;
+}
+
 const EVENTUALLY_MS = 10000;
 const ASK_AGAIN_MS = 100;
 
 async function runStep(puppet, step, saved, options, entry) {
   const side = step.side || options.defaultSide || "client";
   const started = Date.now();
-  let problems = await attempt(puppet, side, step, saved, entry);
+  let problems = await attempt(puppet, side, step, saved, entry, options);
   if (step.eventually) {
     const patience = step.eventually === true ? EVENTUALLY_MS : Number(step.eventually);
     let asked = 1;
     while (problems.length && Date.now() - started < patience && !gameIsGone(problems)) {
       await sleep(ASK_AGAIN_MS);
-      problems = await attempt(puppet, side, step, saved, entry);
+      problems = await attempt(puppet, side, step, saved, entry, options);
       asked++;
     }
     entry.asked = asked;
@@ -371,7 +419,7 @@ function problemLines(text) {
  *
  * @param {import("./lib").Puppet} puppet
  * @param {{name?: string, setup?: object[], steps: object[], teardown?: object[], allow_log?: string[]}} scenario
- * @param {{keepGoing?: boolean, defaultSide?: string, watchLog?: boolean}} options
+ * @param {{keepGoing?: boolean, defaultSide?: string, watchLog?: boolean, baseDir?: string, updateGolden?: boolean}} options
  * @returns {Promise<{name: string, ok: boolean, passed: number, failed: number, steps: object[], saved: object}>}
  */
 async function run(puppet, scenario, options = {}) {
@@ -425,4 +473,4 @@ async function run(puppet, scenario, options = {}) {
   };
 }
 
-module.exports = { parsePath, valueAt, substitute, evaluate, check, run, LogWatch, problemLines };
+module.exports = { parsePath, valueAt, substitute, evaluate, check, run, LogWatch, problemLines, compareGolden };

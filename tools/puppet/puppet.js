@@ -8,13 +8,25 @@
  *   node puppet.js client click_widget text=Done  key=value arguments
  *   node puppet.js server command '{"command":"time set day"}'   or JSON
  *   node puppet.js run scenarios/smoke.json       a scenario; exits 1 if it fails
+ *   node puppet.js record out.json                play by hand, Enter to stop: a scenario of what was done
+ *   node puppet.js launch client --loader fabric --world my_world
+ *                                                 start a dev game, wait for its bridge (and the world)
+ *   node puppet.js stop                           quit the client, stop the server
  *
- *   --dir <gameDir>   where to look (repeatable); else MC_PUPPET_DIRS, else here
+ *   --dir <gameDir>   where to look (repeatable); else MC_PUPPET_DIRS, else here.
+ *                     name=<gameDir> names a game: "side": "client@name" in a scenario
+ *   --junit <file>    also write the results as JUnit XML, for CI
+ *   --update-golden   write golden screenshots from this run instead of comparing
+ *   --project <dir>   launch: the mod project with the gradlew (default: here)
+ *   --loader <name>   launch: fabric or neoforge (default: fabric)
+ *   --world <name>    launch client: open this saved world and wait for it
+ *   --timeout <s>     launch: how long a start may take (default: 600)
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
  *   --no-log          do not fail a scenario for errors the game logged while it ran
  */
 const fs = require("fs");
+const path = require("path");
 const { Puppet } = require("./lib");
 const scenario = require("./scenario");
 
@@ -40,12 +52,21 @@ async function main() {
   let keepGoing = false;
   let raw = false;
   let watchLog = true;
+  let junit = null;
+  let updateGolden = false;
+  const launchOptions = { project: ".", loader: "fabric", world: null, timeout: 600 };
   const words = [];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === "--dir") dirs.push(argv[++index]);
     else if (argv[index] === "--keep-going") keepGoing = true;
     else if (argv[index] === "--json") raw = true;
     else if (argv[index] === "--no-log") watchLog = false;
+    else if (argv[index] === "--junit") junit = argv[++index];
+    else if (argv[index] === "--update-golden") updateGolden = true;
+    else if (argv[index] === "--project") launchOptions.project = argv[++index];
+    else if (argv[index] === "--loader") launchOptions.loader = argv[++index];
+    else if (argv[index] === "--world") launchOptions.world = argv[++index];
+    else if (argv[index] === "--timeout") launchOptions.timeout = Number(argv[++index]);
     else words.push(argv[index]);
   }
   const puppet = new Puppet(dirs);
@@ -70,14 +91,39 @@ async function main() {
     }
     if (first === "run") {
       let failures = 0;
+      const reports = [];
       for (const file of rest) {
         const loaded = JSON.parse(fs.readFileSync(file, "utf8"));
-        const report = await scenario.run(puppet, loaded, { keepGoing, watchLog });
+        const report = await scenario.run(puppet, loaded,
+          { keepGoing, watchLog, updateGolden, baseDir: path.dirname(path.resolve(file)) });
+        reports.push(report);
         if (raw) console.log(JSON.stringify(report, null, 1));
         else print(report);
         if (!report.ok) failures++;
       }
+      if (junit) {
+        fs.mkdirSync(path.dirname(path.resolve(junit)), { recursive: true });
+        fs.writeFileSync(junit, require("./junit").junitXml(reports));
+      }
       return failures ? 1 : 0;
+    }
+    if (first === "record") {
+      const out = rest[0];
+      if (!out) throw new Error("record to which file? puppet record my-scenario.json");
+      await puppet.call("client", "record_start");
+      console.log("Recording. Play it through in the game, then press Enter here.");
+      await new Promise((done) => process.stdin.once("data", done));
+      process.stdin.pause();
+      const recorded = await puppet.call("client", "record_stop", { name: path.basename(out, ".json") });
+      fs.writeFileSync(out, JSON.stringify(recorded, null, 2) + "\n");
+      console.log(`${recorded.steps.length} steps written to ${out}. Add "expect" to the ones that matter.`);
+      return 0;
+    }
+    if (first === "launch") {
+      return await require("./launch").launch(puppet, rest[0] || "client", launchOptions);
+    }
+    if (first === "stop") {
+      return await require("./launch").stop(puppet);
     }
     if (first === "client" || first === "server") {
       const [op, ...argWords] = rest;
@@ -100,10 +146,11 @@ function print(report) {
   console.log(`${report.ok ? "PASS" : "FAIL"}  ${report.name}  (${report.passed}/${report.of} steps` +
     `${report.ran < report.of ? `, stopped after ${report.ran}` : ""})`);
   for (const step of report.steps) {
-    if (step.ok && !step.shown && !step.skipped) continue;
+    if (step.ok && !step.shown && !step.skipped && !(step.golden && step.golden.written)) continue;
     console.log(`  ${step.ok ? (step.skipped ? "skip" : "ok  ") : "FAIL"} ${step.step}. ${step.side} ${step.op}` +
       `${step.phase ? "  (" + step.phase + ")" : ""}${step.note ? "  - " + step.note : ""}`);
     for (const problem of step.problems || []) console.log(`       ${problem}`);
+    if (step.golden && step.golden.written) console.log(`       golden written: ${step.golden.written}`);
     if (step.shown !== undefined) console.log("       " + JSON.stringify(step.shown));
   }
   for (const problem of report.log_problems || []) console.log(`  LOG  ${problem.line}`);

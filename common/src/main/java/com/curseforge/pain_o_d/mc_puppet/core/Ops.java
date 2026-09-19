@@ -85,8 +85,17 @@ public final class Ops {
                 this::batch);
     }
 
+    /** At any time, from any thread: a mod may register an operation after the bridge has opened. */
     public void add(String name, String args, String does, Op op) {
-        entries.put(name, new Entry(op, args, does));
+        synchronized (entries) {
+            entries.put(name, new Entry(op, args, does));
+        }
+    }
+
+    private Entry entry(String name) {
+        synchronized (entries) {
+            return entries.get(name);
+        }
     }
 
     public void now(String name, String args, String does, Now op) {
@@ -99,7 +108,7 @@ public final class Ops {
      * than as an exception in somebody else's thread.
      */
     public CompletableFuture<JsonElement> run(String name, JsonObject args) {
-        Entry entry = entries.get(name);
+        Entry entry = entry(name);
         if (entry == null) {
             return CompletableFuture.failedFuture(
                     new Refused("no such operation on the " + side + ": " + name + " (try \"help\")"));
@@ -127,7 +136,7 @@ public final class Ops {
 
     private CompletableFuture<JsonElement> waitUntil(JsonObject args) throws Refused {
         String name = Args.string(args, "op");
-        Entry entry = entries.get(name);
+        Entry entry = entry(name);
         if (entry == null) {
             throw new Refused("no such operation on the " + side + ": " + name);
         }
@@ -177,12 +186,14 @@ public final class Ops {
         JsonObject catalogue = new JsonObject();
         catalogue.addProperty("side", side);
         JsonArray list = new JsonArray();
-        for (Map.Entry<String, Entry> each : entries.entrySet()) {
-            JsonObject one = new JsonObject();
-            one.addProperty("op", each.getKey());
-            one.addProperty("args", each.getValue().args());
-            one.addProperty("does", each.getValue().does());
-            list.add(one);
+        synchronized (entries) {
+            for (Map.Entry<String, Entry> each : entries.entrySet()) {
+                JsonObject one = new JsonObject();
+                one.addProperty("op", each.getKey());
+                one.addProperty("args", each.getValue().args());
+                one.addProperty("does", each.getValue().does());
+                list.add(one);
+            }
         }
         catalogue.add("ops", list);
         return catalogue;

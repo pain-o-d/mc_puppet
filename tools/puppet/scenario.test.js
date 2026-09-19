@@ -238,3 +238,113 @@ test("a log is read from where it ended when the run began, and known errors can
   files["a.log"] = "[x] [t/ERROR] after restart\n";
   assert.deepEqual(watch.problems().map((each) => each.line), ["[x] [t/ERROR] after restart"]);
 });
+
+test("a PNG survives being written and read, whatever filter its lines use", () => {
+  const png = require("./png");
+  const zlib = require("zlib");
+  const image = { width: 3, height: 2, data: Buffer.from([
+    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
+    10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 128]) };
+  assert.deepEqual(png.decode(png.encode(image)), image);
+  assert.throws(() => png.decode(Buffer.from("not a png at all")), /not a PNG/);
+
+  // A hand-made RGB image whose second line uses the Paeth filter against the first.
+  const lines = Buffer.from([0, 10, 20, 30, 40, 50, 60, 4, 1, 1, 1, 1, 1, 1]);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(2, 0);
+  header.writeUInt32BE(2, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const chunkOf = (type, body) => {
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0);
+    out.write(type, 4, "ascii");
+    body.copy(out, 8);
+    return out; // the decoder does not check a CRC: the game wrote the file a moment ago
+  };
+  const file = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunkOf("IHDR", header), chunkOf("IDAT", zlib.deflateSync(lines)), chunkOf("IEND", Buffer.alloc(0))]);
+  const decoded = png.decode(file);
+  assert.deepEqual([...decoded.data], [10, 20, 30, 255, 40, 50, 60, 255, 11, 21, 31, 255, 41, 51, 61, 255]);
+});
+
+test("two screenshots are compared within a tolerance, in a region, and the difference is drawn", () => {
+  const png = require("./png");
+  const blank = (width, height, value) => ({ width, height, data: Buffer.alloc(width * height * 4, value) });
+  const first = blank(10, 10, 100);
+  const second = blank(10, 10, 104);
+  assert.equal(png.diff(first, second).different, 0, "a dither is not a difference");
+  for (let pixel = 0; pixel < 5; pixel++) second.data[pixel * 4] = 255;
+  const outcome = png.diff(first, second);
+  assert.equal(outcome.different, 5);
+  assert.equal(outcome.percent, 5);
+  assert.deepEqual([...outcome.image.data.subarray(0, 4)], [255, 0, 0, 255]);
+  assert.equal(png.diff(first, second, { region: { x: 0, y: 1, w: 10, h: 9 } }).different, 0);
+  assert.equal(png.diff(first, second, { tolerance: 200 }).different, 0);
+  assert.equal(png.diff(first, blank(10, 11, 100)).same_size, false);
+});
+
+test("a golden is written the first time and compared from then on", () => {
+  const fsReal = require("fs");
+  const os = require("os");
+  const pathOf = require("path");
+  const png = require("./png");
+  const { compareGolden } = require("./scenario");
+  const dir = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-golden-"));
+  try {
+    const shot = pathOf.join(dir, "shot.png");
+    const image = { width: 8, height: 8, data: Buffer.alloc(8 * 8 * 4, 50) };
+    fsReal.writeFileSync(shot, png.encode(image));
+    const golden = { file: "golden/shot.png", max_percent: 1 };
+    const first = {};
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, first), null);
+    assert.ok(first.golden.written.endsWith("shot.png"));
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, {}), null);
+
+    image.data.fill(250, 0, 8 * 4 * 4);
+    fsReal.writeFileSync(shot, png.encode(image));
+    const entry = {};
+    const problem = compareGolden(golden, { path: shot }, { baseDir: dir }, entry);
+    assert.match(problem, /differs from golden\/shot.png in 50% of pixels/);
+    assert.ok(fsReal.existsSync(entry.golden.diff));
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir, updateGolden: true }, {}), null);
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, {}), null);
+    assert.match(compareGolden(golden, {}, { baseDir: dir }, {}), /answers with a "path"/);
+  } finally {
+    fsReal.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reports become JUnit XML that a CI can show, whatever the game said", () => {
+  const { junitXml } = require("./junit");
+  const xml = junitXml([{ name: "buy <apples> & pay", failed: 1, steps: [
+    { step: 1, side: "client", op: "screen", ok: true, ms: 12 },
+    { step: 2, side: "client", op: "click_widget", ok: true, skipped: true, ms: 1 },
+    { step: 3, side: "server", op: "count", ok: false, ms: 5, note: "the server agrees",
+      problems: ["the answer is 3, expected 20", "second \u0007 problem"], phase: "teardown" }],
+    log_problems: [{ file: "latest.log", line: "[x] [Server thread/ERROR] boom" }] }]);
+  assert.match(xml, /<testsuite name="buy &lt;apples&gt; &amp; pay" tests="4" failures="2" skipped="1"/);
+  assert.match(xml, /name="2\. client click_widget"[^>]*><skipped\/>/);
+  assert.match(xml, /name="3\. server count \(teardown\) - the server agrees"/);
+  assert.match(xml, /<failure message="the answer is 3, expected 20">/);
+  assert.match(xml, /the game&apos;s log|the game's log/);
+  assert.ok(!xml.includes("\u0007"));
+});
+
+test("a game can be called by name, and a Windows drive is not a name", () => {
+  const { parseSide, named } = require("./lib");
+  assert.deepEqual(parseSide("client"), { side: "client", game: undefined });
+  assert.deepEqual(parseSide("server@second"), { side: "server", game: "second" });
+  assert.deepEqual(named("second=E:/games/two"), { game: "second", root: "E:/games/two" });
+  assert.deepEqual(named("E:/games/two"), { root: "E:/games/two" });
+  assert.deepEqual(named("C:\\games\\a=b"), { root: "C:\\games\\a=b" });
+});
+
+test("launch knows a multi-loader project from a single-loader one", () => {
+  const { plan } = require("./launch");
+  const here = require("path").resolve(__dirname, "..", "..");
+  assert.equal(plan("client", { project: here, loader: "fabric" }).task, ":fabric:runClient");
+  assert.equal(plan("server", { project: here, loader: "neoforge" }).task, ":neoforge:runServer");
+  assert.equal(plan("client", { project: __dirname, loader: "fabric" }).task, "runClient");
+  assert.throws(() => plan("both", { project: here, loader: "fabric" }), /client or server/);
+});

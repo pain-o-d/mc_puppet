@@ -30,14 +30,17 @@ function pidAlive(pid) {
  * @param {string[]} dirs game directories, or project roots to look under;
  *   defaults to MC_PUPPET_DIRS (separated by ; or the platform's delimiter)
  *   and then to the current directory
- * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string}[]}
+ *   A directory may be given a name, "second=E:/games/two": a scenario then
+ *   says "client@second". One game directory per game: two games in one
+ *   would write the same endpoint file, and the same log.
+ * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string, game?: string}[]}
  */
 function discover(dirs) {
   const roots = (dirs && dirs.length ? dirs : (process.env.MC_PUPPET_DIRS || ".").split(/[;]/))
-    .map((dir) => dir.trim()).filter(Boolean);
+    .map((dir) => dir.trim()).filter(Boolean).map(named);
   const found = [];
   const seen = new Set();
-  for (const root of roots) {
+  for (const { game, root } of roots) {
     for (const usual of USUAL_DIRS) {
       const dir = path.resolve(root, usual);
       const folder = path.join(dir, "mc_puppet");
@@ -55,7 +58,7 @@ function discover(dirs) {
         try {
           const endpoint = JSON.parse(fs.readFileSync(file, "utf8"));
           // A game that was killed leaves its file behind. The pid says so.
-          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir });
+          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(game ? { game } : {}) });
         } catch (unreadable) {
           // Half-written as the game starts; the next look finds it whole.
         }
@@ -64,6 +67,18 @@ function discover(dirs) {
   }
   // Newest first: after a restart the live game is the one to talk to.
   return found.sort((a, b) => (b.started || 0) - (a.started || 0));
+}
+
+/** "name=path" is a named game; a Windows path's own "C:" is not a name. */
+function named(entry) {
+  const match = /^([A-Za-z_][\w-]*)=(.+)$/.exec(entry);
+  return match ? { game: match[1], root: match[2] } : { root: entry };
+}
+
+/** "client@second" is the client of the game called second; "client" is the newest client there is. */
+function parseSide(side) {
+  const at = String(side).indexOf("@");
+  return at < 0 ? { side, game: undefined } : { side: side.slice(0, at), game: side.slice(at + 1) };
 }
 
 /** One connection to one side of one game. Requests are numbered, so they may overlap. */
@@ -163,18 +178,24 @@ class Puppet {
     return discover(this.dirs);
   }
 
-  async side(side) {
-    const live = this.endpoints().find((endpoint) => endpoint.side === side);
+  async side(sideName) {
+    const { side, game } = parseSide(sideName);
+    const live = this.endpoints().find((endpoint) => endpoint.side === side
+      && (game === undefined || endpoint.game === game));
+    if (!live && game !== undefined) {
+      throw new Error(`no running game called "${game}" has its ${side} bridge on. Name a game directory with `
+        + `--dir ${game}=<gameDir> (or ${game}=<gameDir> in MC_PUPPET_DIRS)`);
+    }
     if (!live) {
       throw new Error(`no running game has its ${side} bridge on. Start the game with `
         + `-Dmc_puppet.enabled=true (or "enabled": true in config/mc_puppet.json); `
         + `looked under: ${(this.dirs && this.dirs.length ? this.dirs : [process.env.MC_PUPPET_DIRS || "."]).join(", ")}`);
     }
-    const held = this.connections.get(side);
+    const held = this.connections.get(sideName);
     if (held && held.endpoint.token === live.token && held.socket) return held;
     if (held) held.close();
     const fresh = new Connection(live);
-    this.connections.set(side, fresh);
+    this.connections.set(sideName, fresh);
     return fresh.connect();
   }
 
@@ -189,4 +210,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, Connection, Puppet };
+module.exports = { discover, Connection, Puppet, parseSide, named };

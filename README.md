@@ -215,6 +215,60 @@ from both sides of the game and cleans up after itself;
 `scenarios/eyes-and-hands.json` walks, breaks a block, hits a pig, and reads a
 tooltip, the action bar, a sound and a frame. Both pass on Fabric and NeoForge.
 
+## Writing tests faster
+
+**Record one.** `node tools/puppet/puppet.js record my-test.json`, play it
+through in the game, press Enter. What comes out is a scenario in the terms a
+person would have written: a click on a button is `click_widget` by its text,
+a click on a slot is `click_at {slot, modifiers}`, a screen that opens is a
+`wait` for it by its handler type or title key, and the villager or block
+used to get there is `use_entity` / `use_block`. It has no expectations in
+it — those are the test, and yours to add. Walking about is not recorded.
+
+**Golden screenshots.** On a step that takes a screenshot:
+
+```json
+{ "op": "screenshot", "args": { "name": "trade" },
+  "golden": { "file": "golden/trade.png", "max_percent": 0.5, "region": { "x": 300, "y": 80, "w": 560, "h": 340 } } }
+```
+
+The first run writes the golden (beside the scenario); look at it once. From
+then on a run compares, within a per-channel `tolerance` (16), and a failure
+writes `<name>.diff.png` with the differing pixels in red.
+`--update-golden` rewrites them. A golden holds for one window size, GUI
+scale and language: set the window in `setup`, and compare a `region` when
+the world shows behind the screen.
+
+**CI.** `--junit results.xml` writes JUnit XML — a scenario is a suite, a step
+a case, the game's logged errors a case of their own.
+`puppet launch client --loader fabric --world my_world` starts the dev game
+through the project's Gradle wrapper, waits for the bridge and the world, and
+`puppet stop` asks it to quit, which unlike killing Gradle leaves nothing
+holding the world's lock.
+
+**More than one game.** Name game directories — `--dir a=run1 --dir b=run2` or
+`MC_PUPPET_DIRS=a=run1;b=run2` — and a step says `"side": "client@b"`. One
+game directory per game.
+
+## Operations of your own mod
+
+A test of a mod wants the mod's state as data, not what a command printed:
+
+```java
+if (Platform.isModLoaded("mc_puppet")) {
+    MyPuppetOps.register();          // its own class: nothing of MC Puppet loads without it
+}
+
+PuppetApi.register(PuppetApi.Side.SERVER, "my_mod:price", "{item}",
+        "What an item is worth and by which route.",
+        args -> priceJson(args.get("item").getAsString()));
+```
+
+The handler runs on its side's game thread; what it throws comes back as a
+refusal in words; it is listed by `help`. Names are `modid:operation`.
+Compile against MC Puppet without requiring it (`modCompileOnly`, an optional
+dependency in the metadata, the check above). Register at any time.
+
 ## For AI coding agents (MCP)
 
 `tools/puppet/mcp.js` is a dependency-free [MCP](https://modelcontextprotocol.io)
@@ -251,6 +305,13 @@ free one is used and the file says which. Requests may overlap; match answers
 by `id`. Ten lines of any language are enough — `tools/puppet/lib.js` is the
 reference.
 
+## The audit log
+
+Everything the bridge was asked to do is appended to
+`<gameDir>/mc_puppet/audit-<side>.log`: when, which operation, its arguments
+(cut at 300 characters, never the token), how it ended, how long it took.
+What an unattended agent did to a game can be read back afterwards.
+
 ## Building
 
 ```bash
@@ -262,6 +323,11 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
 
 ## Limits
 
+- The client bridge opens when the game can be used — the first tick with no
+  loading splash — not when it has started. Work handed to a client that is
+  still loading its resources runs from inside that loading, and a world
+  opened from there never finishes opening. `open_world` and `create_world`
+  refuse during a later reload too; `wait {for: loaded}` waits one out.
 - A screenshot is the last rendered frame, and `frame` and `tooltip` need one
   drawn: the window must not be minimised. Behind other windows is fine.
 - `frame` sees what goes through `DrawContext`. A mod that draws with its own
