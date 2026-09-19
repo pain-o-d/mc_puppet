@@ -12,6 +12,7 @@
  *   --dir <gameDir>   where to look (repeatable); else MC_PUPPET_DIRS, else here
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
+ *   --no-log          do not fail a scenario for errors the game logged while it ran
  */
 const fs = require("fs");
 const { Puppet } = require("./lib");
@@ -38,11 +39,13 @@ async function main() {
   const dirs = [];
   let keepGoing = false;
   let raw = false;
+  let watchLog = true;
   const words = [];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === "--dir") dirs.push(argv[++index]);
     else if (argv[index] === "--keep-going") keepGoing = true;
     else if (argv[index] === "--json") raw = true;
+    else if (argv[index] === "--no-log") watchLog = false;
     else words.push(argv[index]);
   }
   const puppet = new Puppet(dirs);
@@ -69,7 +72,7 @@ async function main() {
       let failures = 0;
       for (const file of rest) {
         const loaded = JSON.parse(fs.readFileSync(file, "utf8"));
-        const report = await scenario.run(puppet, loaded, { keepGoing });
+        const report = await scenario.run(puppet, loaded, { keepGoing, watchLog });
         if (raw) console.log(JSON.stringify(report, null, 1));
         else print(report);
         if (!report.ok) failures++;
@@ -99,9 +102,13 @@ function print(report) {
   for (const step of report.steps) {
     if (step.ok && !step.shown && !step.skipped) continue;
     console.log(`  ${step.ok ? (step.skipped ? "skip" : "ok  ") : "FAIL"} ${step.step}. ${step.side} ${step.op}` +
-      `${step.note ? "  - " + step.note : ""}`);
+      `${step.phase ? "  (" + step.phase + ")" : ""}${step.note ? "  - " + step.note : ""}`);
     for (const problem of step.problems || []) console.log(`       ${problem}`);
     if (step.shown !== undefined) console.log("       " + JSON.stringify(step.shown));
+  }
+  for (const problem of report.log_problems || []) console.log(`  LOG  ${problem.line}`);
+  if ((report.log_problems || []).length) {
+    console.log("       the game logged errors while this ran; \"allow_log\": [regex] in the scenario lets known ones by");
   }
 }
 

@@ -54,6 +54,7 @@ public final class Ops {
 
     private final String side;
     private final Executor gameThread;
+    private final Waiter waiter;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
 
     /**
@@ -61,9 +62,24 @@ public final class Ops {
      * @param gameThread runs a task on the thread the game's state belongs to
      */
     public Ops(String side, Executor gameThread) {
+        this(side, gameThread, new Waiter());
+    }
+
+    /**
+     * @param waiter ticked by whoever owns this side's tick; {@code wait_until}
+     *               waits on it
+     */
+    public Ops(String side, Executor gameThread, Waiter waiter) {
         this.side = side;
         this.gameThread = gameThread;
+        this.waiter = waiter;
         now("help", "{}", "Every operation this side answers to, with its arguments.", args -> help());
+        add("wait_until",
+                "{op, args?, path?, equals|not|contains|matches|gt|gte|lt|lte|exists, timeout_ms?: 30000}",
+                "Runs an operation once a tick until its answer meets the expectation, then returns the answer "
+                        + "(the part at \"path\" if given). Wait for data, not for ticks: a slot to fill, offers "
+                        + "to change, a widget to appear. An operation that refuses counts as not yet.",
+                this::waitUntil);
         add("batch", "{steps: [{op, args}], stop_on_error?: true}",
                 "Runs steps in order in one round trip. Returns {results: [{ok, result|error}], completed}.",
                 this::batch);
@@ -107,6 +123,54 @@ public final class Ops {
             answer.completeExceptionally(new Refused("the game is not taking work: " + rejected.getMessage()));
         }
         return answer;
+    }
+
+    private CompletableFuture<JsonElement> waitUntil(JsonObject args) throws Refused {
+        String name = Args.string(args, "op");
+        Entry entry = entries.get(name);
+        if (entry == null) {
+            throw new Refused("no such operation on the " + side + ": " + name);
+        }
+        if (name.equals("wait_until") || name.equals("batch") || name.equals("wait")) {
+            throw new Refused("wait_until takes an operation that answers at once, not " + name);
+        }
+        if (!Expect.hasMatcher(args)) {
+            throw new Refused("wait_until needs something to expect: equals, not, contains, matches, gt, gte, "
+                    + "lt, lte or exists");
+        }
+        JsonObject opArgs = args.has("args") && args.get("args").isJsonObject()
+                ? args.getAsJsonObject("args") : new JsonObject();
+        String path = Args.string(args, "path", "");
+        String[] lastProblem = {"nothing yet"};
+        return waiter.until(() -> name + " to meet the expectation; last: " + lastProblem[0],
+                Args.timeout(args), () -> {
+                    JsonElement answer;
+                    try {
+                        CompletableFuture<JsonElement> asked = entry.op().run(opArgs);
+                        if (!asked.isDone()) {
+                            lastProblem[0] = name + " does not answer at once";
+                            return null;
+                        }
+                        answer = asked.getNow(JsonNull.INSTANCE);
+                    } catch (Refused | java.util.concurrent.CompletionException notYet) {
+                        lastProblem[0] = messageOf(notYet);
+                        return null;
+                    } catch (Exception failure) {
+                        lastProblem[0] = messageOf(failure);
+                        return null;
+                    }
+                    try {
+                        String problem = Expect.check(args, answer);
+                        if (problem != null) {
+                            lastProblem[0] = problem;
+                            return null;
+                        }
+                        JsonElement part = Expect.at(answer, path);
+                        return part == null ? JsonNull.INSTANCE : part;
+                    } catch (Refused badExpectation) {
+                        throw new IllegalArgumentException(badExpectation.getMessage());
+                    }
+                });
     }
 
     private JsonElement help() {

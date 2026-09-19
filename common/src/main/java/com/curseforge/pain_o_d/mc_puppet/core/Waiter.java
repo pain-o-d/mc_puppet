@@ -22,10 +22,10 @@ public final class Waiter {
     private static final class Pending {
         final Supplier<JsonElement> condition;
         final CompletableFuture<JsonElement> answer;
-        final String what;
+        final Supplier<String> what;
         long ticksLeft;
 
-        Pending(Supplier<JsonElement> condition, CompletableFuture<JsonElement> answer, String what,
+        Pending(Supplier<JsonElement> condition, CompletableFuture<JsonElement> answer, Supplier<String> what,
                 long ticksLeft) {
             this.condition = condition;
             this.answer = answer;
@@ -51,6 +51,16 @@ public final class Waiter {
      * @param what said in the failure, so a timed-out test reads as one
      */
     public CompletableFuture<JsonElement> until(String what, long timeoutMs, Supplier<JsonElement> condition) {
+        return until(() -> what, timeoutMs, condition);
+    }
+
+    /**
+     * As {@link #until(String, long, Supplier)}, with what it was waiting for
+     * asked at the moment it gives up: "the offers to change; last seen …" is
+     * worth more to a failed test than "the offers to change".
+     */
+    public CompletableFuture<JsonElement> until(Supplier<String> what, long timeoutMs,
+                                                Supplier<JsonElement> condition) {
         CompletableFuture<JsonElement> answer = new CompletableFuture<>();
         JsonElement already;
         try {
@@ -88,7 +98,7 @@ public final class Waiter {
                 one.answer.complete(result);
             } else if (--one.ticksLeft <= 0) {
                 pending.remove(one);
-                one.answer.completeExceptionally(new Ops.Refused("timed out waiting for " + one.what));
+                one.answer.completeExceptionally(new Ops.Refused("timed out waiting for " + one.what.get()));
             }
         }
     }

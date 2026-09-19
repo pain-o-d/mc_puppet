@@ -124,7 +124,7 @@ class CoreTest {
         void helpListsEverything() throws Exception {
             JsonObject help = ops().run("help", new JsonObject()).get().getAsJsonObject();
             assertEquals("test", help.get("side").getAsString());
-            assertEquals(5, help.getAsJsonArray("ops").size());
+            assertEquals(6, help.getAsJsonArray("ops").size());
         }
     }
 

@@ -50,6 +50,10 @@ public final class PuppetClient {
 
         ClientLifecycleEvent.CLIENT_STARTED.register(client -> {
             try {
+                // A test runs behind other windows. Vanilla opens the pause menu
+                // when its window loses focus, and every step in the world then
+                // meets a screen nobody opened. Not written to options.txt.
+                client.options.pauseOnLostFocus = false;
                 Ops ops = ClientOps.create(client, waiter, chat);
                 bridge = Bridge.open("client", ops, config.clientPort(), Platform.getGameFolder());
             } catch (IOException | RuntimeException failure) {

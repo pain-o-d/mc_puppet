@@ -86,7 +86,7 @@ public final class ClientOps {
     }
 
     public static Ops create(MinecraftClient client, Waiter waiter, ChatLog chat) {
-        Ops ops = new Ops("client", client::execute);
+        Ops ops = new Ops("client", client::execute, waiter);
 
         // ---- seeing ---------------------------------------------------------
 
@@ -119,19 +119,64 @@ public final class ClientOps {
 
         // ---- doing ----------------------------------------------------------
 
-        ops.now("click_widget", "{index?: n, text?: substring, button?: 0}",
-                "Clicks a widget at its centre, by index from \"screen\" or by its text.",
+        ops.now("click_widget", "{index?: n, text?: substring, button?: 0, modifiers?, direct?: false}",
+                "Clicks a widget at its centre, by index from \"screen\" or by its text, through the game's "
+                        + "mouse handler. \"direct\" calls the screen's own method instead, skipping loader events.",
                 args -> clickWidget(client, args));
 
-        ops.now("click_at", "{x, y, button?: 0}", "Clicks at scaled GUI coordinates.", args -> {
-            Screen screen = requireScreen(client);
-            double x = Args.decimal(args, "x");
-            double y = Args.decimal(args, "y");
-            int button = Args.integer(args, "button", 0);
-            boolean handled = screen.mouseClicked(x, y, button);
-            screen.mouseReleased(x, y, button);
-            return new JsonPrimitive(handled);
-        });
+        ops.now("click_at", "{x, y} | {slot: n} | {widget: index|text}, button?: 0, "
+                        + "modifiers?: [shift|control|alt], direct?: false",
+                "Clicks at scaled GUI coordinates, or on a slot or a widget, through the game's mouse handler: "
+                        + "{slot: 2, modifiers: [shift]} is the shift-click a player makes. With no screen open it "
+                        + "is a click in the world: the attack or use key.",
+                args -> {
+                    double[] at = pointOf(client, args);
+                    double x = at[0];
+                    double y = at[1];
+                    int button = Input.buttonOf(args);
+                    if (Args.flag(args, "direct", false)) {
+                        Screen screen = requireScreen(client);
+                        boolean handled = screen.mouseClicked(x, y, button);
+                        screen.mouseReleased(x, y, button);
+                        return new JsonPrimitive(handled);
+                    }
+                    return Input.withModifiers(args, () -> {
+                        Input.click(client, x, y, button);
+                        return JsonNull.INSTANCE;
+                    });
+                });
+
+        ops.add("hover", "{x, y} | {widget: index|text} | {slot: n}",
+                "Moves the cursor there and waits a frame, so that what hovering shows is on screen: a tooltip, "
+                        + "a highlight. Follow with tooltip, frame or screenshot.",
+                args -> {
+                    double[] at = pointOf(client, args);
+                    Input.moveTo(client, at[0], at[1]);
+                    return Input.overTicks(waiter, "a frame", List.of(() -> { }, () -> { }), () -> {
+                        JsonObject json = new JsonObject();
+                        json.addProperty("x", at[0]);
+                        json.addProperty("y", at[1]);
+                        return json;
+                    });
+                });
+
+        ops.add("drag", "{from: {x,y}|{slot}|{widget}, to: [{x,y}|{slot}|{widget}, …] | {…}, button?: 0, "
+                        + "modifiers?}",
+                "Presses at \"from\", moves through each of \"to\" a tick apart, and releases at the last. With "
+                        + "a stack on the cursor, dragging over slots spreads it, as it does for a player.",
+                args -> drag(client, waiter, args));
+
+        ops.now("scroll", "{amount, x?, y?, widget?, slot?}",
+                "Turns the wheel, positive up, over a point, a widget or a slot; by default the middle of the "
+                        + "screen. A merchant's list of trades scrolls this way.",
+                args -> {
+                    double[] at = args.has("x") || args.has("widget") || args.has("slot")
+                            ? pointOf(client, args)
+                            : new double[] {client.getWindow().getScaledWidth() / 2.0,
+                                    client.getWindow().getScaledHeight() / 2.0};
+                    Input.scroll(client, at[0], at[1], Args.decimal(args, "amount"));
+                    return JsonNull.INSTANCE;
+                });
 
         ops.now("click_slot", "{slot, button?: 0, action?: PICKUP|QUICK_MOVE|SWAP|CLONE|THROW|PICKUP_ALL}",
                 "Clicks a container slot as the player would; QUICK_MOVE is shift-click.",
@@ -140,19 +185,35 @@ public final class ClientOps {
         ops.now("select_trade", "{index}", "Selects a merchant's offer, as clicking it in the list does.",
                 args -> selectTrade(client, args));
 
-        ops.now("key", "{key: name|code, modifiers?: 0}",
-                "Presses a key in the open screen: escape, enter, tab, backspace, up, down, left, right, "
-                        + "space, a-z, 0-9, or a GLFW code.",
-                args -> new JsonPrimitive(requireScreen(client).keyPressed(
-                        keyCode(Args.string(args, "key")), 0, Args.integer(args, "modifiers", 0))));
+        ops.now("key", "{key: name|letter|digit|code, action?: tap|press|release, modifiers?: [shift|control|alt]}",
+                "A key, through the game's keyboard handler: a screen hears it, and with no screen open the key "
+                        + "bindings do (e opens the inventory, f5 changes the view). press holds it until release, "
+                        + "and the game believes it is down meanwhile: hold shift, then click. Names: escape, "
+                        + "enter, tab, backspace, delete, arrows, home, end, space, shift, control, alt, f1-f25.",
+                args -> {
+                    int code = VirtualKeys.code(Args.string(args, "key"));
+                    String action = Args.string(args, "action", "tap");
+                    return Input.withModifiers(args, () -> {
+                        if (!action.equals("release")) {
+                            Input.key(client, code, true);
+                        }
+                        if (!action.equals("press")) {
+                            Input.key(client, code, false);
+                        }
+                        return JsonNull.INSTANCE;
+                    });
+                });
 
-        ops.now("type", "{text}", "Types text into the focused widget of the open screen.", args -> {
-            Screen screen = requireScreen(client);
-            for (char each : Args.string(args, "text").toCharArray()) {
-                screen.charTyped(each, 0);
-            }
+        ops.now("release_keys", "{}", "Lets go of every key a test is holding.", args -> {
+            VirtualKeys.releaseAll();
             return JsonNull.INSTANCE;
         });
+
+        ops.now("type", "{text}", "Types text, through the game's keyboard handler, into whatever has focus.",
+                args -> {
+                    Input.type(client, Args.string(args, "text"));
+                    return JsonNull.INSTANCE;
+                });
 
         ops.now("close_screen", "{}", "Closes the open screen, as escape does for a container.", args -> {
             if (client.player != null && client.currentScreen instanceof HandledScreen<?>) {
@@ -258,7 +319,7 @@ public final class ClientOps {
         JsonObject info = new JsonObject();
         info.addProperty("side", "client");
         info.addProperty("minecraft", net.minecraft.SharedConstants.getGameVersion().getName());
-        info.addProperty("loader", client.getGameVersion());
+        info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : "neoforge");
         info.addProperty("in_world", client.world != null && client.player != null);
         info.addProperty("singleplayer", client.isInSingleplayer());
         info.addProperty("screen", client.currentScreen == null ? null : client.currentScreen.getClass().getName());
@@ -323,6 +384,14 @@ public final class ClientOps {
         JsonObject json = new JsonObject();
         json.addProperty("class", screen.getClass().getName());
         json.addProperty("title", screen.getTitle().getString());
+        String titleKey = titleKeyOf(screen);
+        if (titleKey != null) {
+            json.addProperty("title_key", titleKey);
+        }
+        String handlerType = handlerTypeOf(screen);
+        if (handlerType != null) {
+            json.addProperty("handler_type", handlerType);
+        }
         json.addProperty("width", screen.width);
         json.addProperty("height", screen.height);
 
@@ -444,7 +513,7 @@ public final class ClientOps {
         String name = Args.string(args, "name", "puppet-" + System.currentTimeMillis());
         String fileName = name.replaceAll("[^A-Za-z0-9._-]", "_") + (name.endsWith(".png") ? "" : ".png");
         File gameDir = client.runDirectory;
-        Path path = gameDir.toPath().resolve("screenshots").resolve(fileName);
+        Path path = gameDir.toPath().toAbsolutePath().normalize().resolve("screenshots").resolve(fileName);
         CompletableFuture<JsonElement> done = new CompletableFuture<>();
         ScreenshotRecorder.saveScreenshot(gameDir, fileName, client.getFramebuffer(), said -> {
             if (Files.exists(path)) {
@@ -489,12 +558,20 @@ public final class ClientOps {
         }
         double x = target.getX() + target.getWidth() / 2.0;
         double y = target.getY() + target.getHeight() / 2.0;
-        int button = Args.integer(args, "button", 0);
-        boolean handled = screen.mouseClicked(x, y, button);
-        screen.mouseReleased(x, y, button);
+        int button = Input.buttonOf(args);
         JsonObject json = new JsonObject();
         json.addProperty("clicked", target.getMessage().getString());
-        json.addProperty("handled", handled);
+        if (Args.flag(args, "direct", false)) {
+            json.addProperty("handled", screen.mouseClicked(x, y, button));
+            screen.mouseReleased(x, y, button);
+            return json;
+        }
+        // Through the mouse handler, which is where the loaders raise the
+        // screen events a mod may be listening to instead of overriding.
+        Input.withModifiers(args, () -> {
+            Input.click(client, x, y, button);
+            return null;
+        });
         return json;
     }
 
@@ -536,7 +613,10 @@ public final class ClientOps {
         ((MerchantScreenAccessor) screen).mc_puppet$setSelectedIndex(index);
         handler.setRecipeIndex(index);
         handler.switchTo(index);
-        client.getNetworkHandler().sendPacket(new SelectMerchantTradeC2SPacket(index));
+        // Through the connection, not the handler: NeoForge replaces the handler's
+        // sendPacket with one of its own, and a call compiled against vanilla's is a
+        // NoSuchMethodError there, which the first NeoForge run of the scenario found.
+        client.getNetworkHandler().getConnection().send(new SelectMerchantTradeC2SPacket(index));
         return GameJson.offers(handler.getRecipes()).get(index);
     }
 
@@ -646,9 +726,7 @@ public final class ClientOps {
                     if (screen == null) {
                         return null;
                     }
-                    boolean matches = wanted.isEmpty()
-                            || screen.getClass().getName().toLowerCase(Locale.ROOT).contains(wanted)
-                            || screen.getTitle().getString().toLowerCase(Locale.ROOT).contains(wanted);
+                    boolean matches = wanted.isEmpty() || screenIs(screen, wanted);
                     return matches ? new JsonPrimitive(screen.getClass().getName()) : null;
                 });
             case "no_screen":
@@ -679,6 +757,126 @@ public final class ClientOps {
 
     // ---- helpers ---------------------------------------------------------------------
 
+    /**
+     * A container screen's registered type, which is the same in a
+     * development run and a shipped jar. A class name is not: MerchantScreen
+     * is class_492 to a player, and a scenario that waited for it by name
+     * worked for its author and nobody else.
+     */
+    static String handlerTypeOf(Screen screen) {
+        if (!(screen instanceof HandledScreen<?> handled)) {
+            return null;
+        }
+        try {
+            var id = Registries.SCREEN_HANDLER.getId(handled.getScreenHandler().getType());
+            return id == null ? null : id.toString();
+        } catch (UnsupportedOperationException untyped) {
+            // The player's own inventory has no type; it is never opened by a server.
+            return "minecraft:player_inventory";
+        }
+    }
+
+    static String titleKeyOf(Screen screen) {
+        return screen.getTitle().getContent() instanceof net.minecraft.text.TranslatableTextContent translated
+                ? translated.getKey() : null;
+    }
+
+    /** Whether a screen is the one meant: by handler type or title key first, then title, then class. */
+    static boolean screenIs(Screen screen, String wantedLowerCase) {
+        String handlerType = handlerTypeOf(screen);
+        String titleKey = titleKeyOf(screen);
+        return (handlerType != null && handlerType.contains(wantedLowerCase))
+                || (titleKey != null && titleKey.toLowerCase(Locale.ROOT).contains(wantedLowerCase))
+                || screen.getTitle().getString().toLowerCase(Locale.ROOT).contains(wantedLowerCase)
+                || screen.getClass().getName().toLowerCase(Locale.ROOT).contains(wantedLowerCase);
+    }
+
+    /** A point on screen from {x, y}, {widget: index|text} or {slot: n}, in scaled GUI pixels. */
+    static double[] pointOf(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        if (args.has("x") && args.has("y")) {
+            return new double[] {Args.decimal(args, "x"), Args.decimal(args, "y")};
+        }
+        Screen screen = requireScreen(client);
+        if (args.has("slot")) {
+            if (!(screen instanceof HandledScreen<?> handled)) {
+                throw new Ops.Refused("no container screen is open");
+            }
+            int slot = Args.integer(args, "slot");
+            var slots = handled.getScreenHandler().slots;
+            if (slot < 0 || slot >= slots.size()) {
+                throw new Ops.Refused("the container has " + slots.size() + " slots; there is no slot " + slot);
+            }
+            HandledScreenAccessor bounds = (HandledScreenAccessor) handled;
+            return new double[] {bounds.mc_puppet$x() + slots.get(slot).x + 8,
+                    bounds.mc_puppet$y() + slots.get(slot).y + 8};
+        }
+        if (args.has("widget")) {
+            ClickableWidget widget = widgetBy(screen, args.get("widget").getAsString());
+            return new double[] {widget.getX() + widget.getWidth() / 2.0, widget.getY() + widget.getHeight() / 2.0};
+        }
+        throw new Ops.Refused("a place is {x, y}, {widget: index or text} or {slot: n}");
+    }
+
+    static ClickableWidget widgetBy(Screen screen, String indexOrText) throws Ops.Refused {
+        List<ClickableWidget> widgets = widgetsOf(screen);
+        if (indexOrText.matches("\\d+")) {
+            int index = Integer.parseInt(indexOrText);
+            if (index >= widgets.size()) {
+                throw new Ops.Refused("the screen has " + widgets.size() + " widgets; there is no index " + index);
+            }
+            return widgets.get(index);
+        }
+        String wanted = indexOrText.toLowerCase(Locale.ROOT);
+        for (ClickableWidget widget : widgets) {
+            if (widget.visible && widget.getMessage().getString().toLowerCase(Locale.ROOT).contains(wanted)) {
+                return widget;
+            }
+        }
+        throw new Ops.Refused("no visible widget says \"" + indexOrText + "\"");
+    }
+
+    private static CompletableFuture<JsonElement> drag(MinecraftClient client, Waiter waiter, JsonObject args)
+            throws Ops.Refused {
+        if (!args.has("from") || !args.get("from").isJsonObject() || !args.has("to")) {
+            throw new Ops.Refused("drag takes \"from\" and \"to\"");
+        }
+        double[] from = pointOf(client, args.getAsJsonObject("from"));
+        List<double[]> path = new ArrayList<>();
+        if (args.get("to").isJsonArray()) {
+            for (JsonElement each : args.getAsJsonArray("to")) {
+                path.add(pointOf(client, each.getAsJsonObject()));
+            }
+        } else {
+            path.add(pointOf(client, args.getAsJsonObject("to")));
+        }
+        if (path.isEmpty()) {
+            throw new Ops.Refused("\"to\" names no place");
+        }
+        int button = Input.buttonOf(args);
+        List<Integer> modifiers = new ArrayList<>();
+        if (args.has("modifiers") && args.get("modifiers").isJsonArray()) {
+            for (JsonElement each : args.getAsJsonArray("modifiers")) {
+                modifiers.add(VirtualKeys.code(each.getAsString()));
+            }
+        }
+        List<Runnable> steps = new ArrayList<>();
+        steps.add(() -> {
+            modifiers.forEach(VirtualKeys::hold);
+            Input.moveTo(client, from[0], from[1]);
+            Input.button(client, button, true);
+        });
+        for (double[] point : path) {
+            steps.add(() -> Input.moveTo(client, point[0], point[1]));
+        }
+        double[] last = path.get(path.size() - 1);
+        steps.add(() -> {
+            Input.moveTo(client, last[0], last[1]);
+            Input.button(client, button, false);
+            modifiers.forEach(VirtualKeys::release);
+        });
+        return Input.overTicks(waiter, "the drag to finish", steps, () -> new JsonPrimitive(path.size()));
+    }
+
     private static Screen requireScreen(MinecraftClient client) throws Ops.Refused {
         if (client.currentScreen == null) {
             throw new Ops.Refused("no screen is open");
@@ -695,37 +893,5 @@ public final class ClientOps {
 
     private static String stripSlash(String command) {
         return command.startsWith("/") ? command.substring(1) : command;
-    }
-
-    static int keyCode(String key) throws Ops.Refused {
-        String name = key.toLowerCase(Locale.ROOT);
-        switch (name) {
-            case "escape": return 256;
-            case "enter": return 257;
-            case "tab": return 258;
-            case "backspace": return 259;
-            case "delete": return 261;
-            case "right": return 262;
-            case "left": return 263;
-            case "down": return 264;
-            case "up": return 265;
-            case "space": return 32;
-            default:
-                break;
-        }
-        if (name.length() == 1) {
-            char only = name.charAt(0);
-            if (only >= 'a' && only <= 'z') {
-                return 'A' + (only - 'a');
-            }
-            if (only >= '0' && only <= '9') {
-                return only;
-            }
-        }
-        try {
-            return Integer.parseInt(name);
-        } catch (NumberFormatException unknown) {
-            throw new Ops.Refused("unknown key \"" + key + "\"; a name, a letter, a digit or a GLFW code");
-        }
     }
 }

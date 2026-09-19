@@ -1,7 +1,7 @@
-// node --test tools/puppet
+// node --test tools/puppet/scenario.test.js
 const test = require("node:test");
 const assert = require("node:assert");
-const { valueAt, substitute, check, run, parsePath } = require("./scenario");
+const { valueAt, substitute, check, run, parsePath, evaluate, LogWatch, problemLines } = require("./scenario");
 
 const screen = {
   title: "Librarian",
@@ -133,4 +133,106 @@ test("one step's answer feeds the next step's arguments and expectations", async
   assert.equal(report.ok, true, JSON.stringify(report.steps));
   assert.deepEqual(puppet.calls[1].args, { index: 2 });
   assert.deepEqual(report.steps[2].shown, { id: "saros:euro", count: 7 });
+});
+
+test("a sum over saved values, read by hand and never by eval", () => {
+  const saved = { before: { count: 40, offers: [{ price: 7 }] }, paid: "3" };
+  assert.equal(evaluate("before.count - 3 * before.offers[0].price", saved), 19);
+  assert.equal(evaluate("(before.count - 4) / paid", saved), 12);
+  assert.equal(evaluate("-before.count % 7", saved), -5);
+  assert.equal(evaluate("min(before.count, 9) + floor(7 / 2) + abs(-1)", saved), 13);
+  assert.equal(evaluate("before.offers# + 0.1 + 0.2", saved), 1.3);
+  assert.equal(substitute("${= before.count - 1}", saved), 39);
+  assert.equal(substitute("has ${= before.count * 2} left", saved), "has 80 left");
+  assert.deepEqual(substitute({ equals: "${=before.offers[-1].price+1}" }, saved), { equals: 8 });
+  assert.throws(() => evaluate("before.count +", saved), /missing/);
+  assert.throws(() => evaluate("before.offers", saved), /not a number/);
+  assert.throws(() => evaluate("process.exit(1)", saved), /nothing was saved as "process"/);
+  assert.throws(() => evaluate("1; 2", saved), /cannot read/);
+});
+
+/** A game that answers from a script, one answer per call. */
+function scripted(answers) {
+  const asked = [];
+  return {
+    asked,
+    call: async (side, op, args) => {
+      asked.push({ side, op, args });
+      const next = answers[op];
+      const answer = Array.isArray(next) ? (next.length > 1 ? next.shift() : next[0]) : next;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  };
+}
+
+test("teardown runs whatever happened, and setup that failed skips the steps", async () => {
+  const puppet = scripted({ give: {}, look: { count: 1 }, clear: {}, never: new Error("no such thing") });
+  const failedStep = await run(puppet, {
+    setup: [{ op: "give" }],
+    steps: [{ op: "look", expect: [{ path: "count", equals: 2 }] }, { op: "look" }],
+    teardown: [{ op: "never" }, { op: "clear" }],
+  });
+  assert.equal(failedStep.ok, false);
+  assert.deepEqual(puppet.asked.map((each) => each.op), ["give", "look", "never", "clear"]);
+  assert.equal(failedStep.steps[3].phase, "teardown");
+  assert.equal(failedStep.of, 5);
+
+  const second = scripted({ clear: {}, never: new Error("no such thing") });
+  const failedSetup = await run(second, { setup: [{ op: "never" }], steps: [{ op: "look" }], teardown: [{ op: "clear" }] });
+  assert.equal(failedSetup.ok, false);
+  assert.deepEqual(second.asked.map((each) => each.op), ["never", "clear"]);
+});
+
+test("eventually asks again until the expectations hold, and gives up in time", async () => {
+  const puppet = scripted({ look: [{ count: 0 }, { count: 0 }, { count: 5 }] });
+  const report = await run(puppet, { steps: [{ op: "look", eventually: 2000, save: "seen",
+    expect: [{ path: "count", gte: 5 }] }] });
+  assert.equal(report.ok, true);
+  assert.equal(report.steps[0].asked, 3);
+  assert.equal(report.saved.seen.count, 5);
+
+  const never = await run(scripted({ look: { count: 0 } }),
+    { steps: [{ op: "look", eventually: 250, expect: [{ path: "count", gte: 5 }] }] });
+  assert.equal(never.ok, false);
+  assert.match(never.steps[0].problems[0], /expected gte 5/);
+});
+
+test("a step that should be refused fails when it is answered", async () => {
+  const report = await run(scripted({ look: {} }), { steps: [{ op: "look", expect_error: "no screen" }] });
+  assert.equal(report.ok, false);
+});
+
+test("the lines of a log that say something went wrong", () => {
+  const log = [
+    "[12:00:01] [Render thread/INFO] (Minecraft) Stopping!",
+    "[12:00:02] [Server thread/ERROR] (get_rich) Could not price minecraft:cake",
+    "[12:00:03] [Render thread/WARN] (Minecraft) Something about an Error in a name",
+    "java.lang.IllegalStateException: boom",
+    "\tat com.example.Thing.run(Thing.java:12)",
+    "[12:00:04] [main/FATAL] (mixin) Mixin apply failed",
+  ].join("\n");
+  assert.deepEqual(problemLines(log), [
+    "[12:00:02] [Server thread/ERROR] (get_rich) Could not price minecraft:cake",
+    "java.lang.IllegalStateException: boom",
+    "[12:00:04] [main/FATAL] (mixin) Mixin apply failed",
+  ]);
+});
+
+test("a log is read from where it ended when the run began, and known errors can be let by", () => {
+  const files = { "a.log": "[x] [t/ERROR] old\n" };
+  const fake = {
+    statSync: (file) => ({ size: Buffer.byteLength(files[file]) }),
+    openSync: (file) => file,
+    readSync: (file, buffer, offset, length, position) => Buffer.from(files[file]).copy(buffer, 0, position, position + length),
+    closeSync: () => {},
+  };
+  const watch = new LogWatch(["a.log"], fake);
+  assert.deepEqual(watch.problems(), []);
+  files["a.log"] += "[x] [t/INFO] fine\n[x] [t/ERROR] new one\n[x] [t/ERROR] known: narrator\n";
+  assert.deepEqual(watch.problems().map((each) => each.line), ["[x] [t/ERROR] new one", "[x] [t/ERROR] known: narrator"]);
+  assert.deepEqual(watch.problems(["narrator"]).map((each) => each.line), ["[x] [t/ERROR] new one"]);
+  // Shorter than it was: the game restarted, and the whole of the new log counts.
+  files["a.log"] = "[x] [t/ERROR] after restart\n";
+  assert.deepEqual(watch.problems().map((each) => each.line), ["[x] [t/ERROR] after restart"]);
 });
