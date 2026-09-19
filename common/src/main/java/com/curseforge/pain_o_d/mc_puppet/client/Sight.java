@@ -66,7 +66,8 @@ final class Sight {
                 "What the next frame draws, as data: every string with where it landed and how wide, every "
                         + "item, tooltips, and on request every sprite. Sees what a screen draws without widgets "
                         + "- prices, headings, a HUD overlay. \"issues\" lists text off the screen, text drawn "
-                        + "over other text, and labels wider than their widget. The window must not be minimised.",
+                        + "over other text, and labels wider than their widget - of the open screen when there is "
+                        + "one (each text says its layer: hud, screen or overlay), else of the HUD. The window must not be minimised.",
                 args -> frame(client, waiter, args));
 
         ops.add("tooltip", "{slot: n} | {widget: index|text} | {x, y}",
@@ -213,7 +214,8 @@ final class Sight {
                 labelWidths.add((double) client.textRenderer.getWidth(widget.getMessage()));
             }
         }
-        return Layout.issues(captured.texts, widgets, labelWidths, client.getWindow().getScaledWidth(),
+        // With a screen open the HUD is behind it, dimmed, and what it overlaps there is nobody's defect.
+        return Layout.issues(captured.textsToJudge(), widgets, labelWidths, client.getWindow().getScaledWidth(),
                 client.getWindow().getScaledHeight());
     }
 

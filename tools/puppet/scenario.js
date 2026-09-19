@@ -256,10 +256,9 @@ async function attempt(puppet, side, step, saved, entry, options = {}) {
       if (problem) problems.push(problem);
     }
     if (step.expect_error !== undefined) problems.push(`answered, where it should have been refused with "${step.expect_error}"`);
-    if (!problems.length) {
-      if (step.save) saved[step.save] = result;
-      if (step.show) entry.shown = valueAt(result, step.show === true ? "" : step.show);
-    }
+    if (!problems.length && step.save) saved[step.save] = result;
+    // Shown whether it passed or not: what a failed step saw is the first thing anyone asks.
+    if (step.show) entry.shown = valueAt(result, step.show === true ? "" : step.show);
     return problems;
   } catch (failure) {
     // A step may be meant to be refused: {"expect_error": "part of the message"}.

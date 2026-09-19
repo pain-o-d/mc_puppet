@@ -202,8 +202,15 @@ public final class Recorder {
         if (name.equals(lastScreen)) {
             return;
         }
+        boolean fromTheWorld = lastScreen.isEmpty();
         lastScreen = name;
         flushTyped();
+        if (fromTheWorld && name.equals("minecraft:player_inventory")) {
+            // Opened with a key, in the world, where no screen was there to hear it.
+            JsonObject key = new JsonObject();
+            key.addProperty("key", "inventory");
+            add("tap", key, null);
+        }
         JsonObject args = new JsonObject();
         if (screen == null) {
             args.addProperty("for", "no_screen");

@@ -140,7 +140,10 @@ scaled heading or a tooltip is where the player sees it:
 
 `issues` is the part of looking at a screenshot that is arithmetic: text that
 runs **off the screen**, text drawn **over other text**, and a **label wider
-than its widget**. Nothing is recorded unless asked, and then for one frame.
+than its widget**. With a screen open they are judged among what the screen itself drew — each
+text carries its `layer`: `hud`, `screen` or `overlay` — because the HUD is
+behind it and what overlaps there is nobody's defect. Nothing is recorded
+unless asked, and then for one frame.
 
 `tooltip {slot|widget|x,y}` hovers and returns the lines the game then
 draws, with what mods add. `hud` is the action bar, title, boss bars, sidebar,
