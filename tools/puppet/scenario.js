@@ -21,6 +21,9 @@
  * whatever happened before it, so a failed run leaves the world as it found
  * it and the next run does not fail for that reason.
  *
+ * A step that is {"let": {"name": value}} calls nothing: it gives a name to a
+ * value or a sum, for the steps after it to use.
+ *
  * A step with "eventually": true (or a number of milliseconds) is asked again
  * until its expectations hold. For one expectation on one answer the game's
  * own wait_until is exact to the tick and one round trip; "eventually" is for
@@ -93,15 +96,28 @@ function valueAt(root, path) {
   return value;
 }
 
-/** Replaces ${name.path} by saved values. A string that is only a reference keeps the value's type. */
+/**
+ * Replaces ${name.path} by saved values. A string that is only a reference
+ * keeps the value's type. References nest, innermost first, so that one saved
+ * value can pick from another: ${wallet.coins[item=${counter.offers[0].buy.id}].units}.
+ */
 function substitute(value, saved) {
   if (typeof value === "string") {
-    const whole = /^\$\{([^}]+)\}$/.exec(value);
-    if (whole) return resolve(whole[1], saved);
-    return value.replace(/\$\{([^}]+)\}/g, (all, reference) => {
-      const found = resolve(reference, saved);
-      return found === undefined ? all : typeof found === "object" ? JSON.stringify(found) : String(found);
-    });
+    let text = value;
+    for (let round = 0; round < 8; round++) {
+      const whole = /^\$\{([^${}]+)\}$/.exec(text);
+      if (whole) return resolve(whole[1], saved);
+      let replaced = false;
+      const next = text.replace(/\$\{([^${}]+)\}/g, (all, reference) => {
+        const found = resolve(reference, saved);
+        if (found === undefined) return all;
+        replaced = true;
+        return typeof found === "object" ? JSON.stringify(found) : String(found);
+      });
+      if (!replaced) return next;
+      text = next;
+    }
+    return text;
   }
   if (Array.isArray(value)) return value.map((each) => substitute(each, saved));
   if (value && typeof value === "object") {
@@ -322,6 +338,19 @@ const ASK_AGAIN_MS = 100;
 async function runStep(puppet, step, saved, options, entry) {
   const side = step.side || options.defaultSide || "client";
   const started = Date.now();
+  if (step.let) {
+    // Names for what the steps after it keep saying: {"let": {"price": "${= offer.count * coin.units}"}}.
+    try {
+      for (const [name, value] of Object.entries(step.let)) saved[name] = substitute(value, saved);
+      entry.ok = true;
+      if (step.show) entry.shown = Object.fromEntries(Object.keys(step.let).map((name) => [name, saved[name]]));
+    } catch (failure) {
+      entry.ok = false;
+      entry.problems = [failure.message];
+    }
+    entry.ms = Date.now() - started;
+    return entry;
+  }
   let problems = await attempt(puppet, side, step, saved, entry, options);
   if (step.eventually) {
     const patience = step.eventually === true ? EVENTUALLY_MS : Number(step.eventually);
@@ -438,7 +467,8 @@ async function run(puppet, scenario, options = {}) {
   async function phase(name, steps, keepGoing) {
     let clean = true;
     for (const step of steps || []) {
-      const entry = { step: ++number, side: step.side || options.defaultSide || "client", op: step.op };
+      const entry = step.let ? { step: ++number, side: "-", op: "let" }
+        : { step: ++number, side: step.side || options.defaultSide || "client", op: step.op };
       if (name !== "steps") entry.phase = name;
       if (step.note) entry.note = step.note;
       report.push(await runStep(puppet, step, saved, options, entry));

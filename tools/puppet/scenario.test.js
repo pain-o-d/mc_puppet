@@ -358,3 +358,26 @@ test("a step can compare two parts of its own answer", async () => {
   assert.equal(clipped.ok, false);
   assert.match(clipped.steps[0].problems[0], /is 104, expected lt 76/);
 });
+
+test("references nest, and let gives a name to what the steps after it keep saying", async () => {
+  const saved = { counter: { offers: [{ buy: { id: "mod:euro_2", count: 4 } }] },
+    wallet: { coins: [{ item: "mod:euro_1", units: 100 }, { item: "mod:euro_2", units: 200 }] } };
+  assert.equal(substitute("${wallet.coins[item=${counter.offers[0].buy.id}].units}", saved), 200);
+  assert.equal(substitute("costs ${= counter.offers[0].buy.count * wallet.coins[item=${counter.offers[0].buy.id}].units} units", saved),
+    "costs 800 units");
+
+  const puppet = scripted({ screen: saved.counter, wallet: saved.wallet, pay: {} });
+  const report = await run(puppet, { steps: [
+    { op: "screen", save: "counter" },
+    { op: "wallet", save: "wallet" },
+    { let: { coin: "${wallet.coins[item=${counter.offers[0].buy.id}].units}" } },
+    { let: { price: "${= counter.offers[0].buy.count * coin}", trades: "${= min(floor(2000 / (counter.offers[0].buy.count * coin)), 16)}" }, show: true },
+    { op: "pay", args: { units: "${price}" } },
+    { let: { broken: "${= nothing.here}" } } ] }, { keepGoing: true });
+  assert.equal(report.saved.price, 800);
+  assert.equal(report.saved.trades, 2);
+  assert.deepEqual(puppet.asked[2].args, { units: 800 });
+  assert.deepEqual(report.steps[3].shown, { price: 800, trades: 2 });
+  assert.equal(report.steps[5].ok, false);
+  assert.match(report.steps[5].problems[0], /nothing was saved as "nothing"/);
+});
