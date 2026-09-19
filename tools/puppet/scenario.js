@@ -246,6 +246,9 @@ async function attempt(puppet, side, step, saved, entry, options = {}) {
   try {
     const args = substitute(step.args || {}, saved);
     const result = await puppet.call(side, step.op, args);
+    // Saved before it is checked, so that a step can compare two parts of its own answer:
+    // "text_w" lt "${fit.widgets[0].w}" on the step that saves "fit".
+    if (step.save) saved[step.save] = result;
     const problems = [];
     for (const expectation of step.expect || []) {
       const problem = check(substitute(expectation, saved), result);
@@ -256,7 +259,6 @@ async function attempt(puppet, side, step, saved, entry, options = {}) {
       if (problem) problems.push(problem);
     }
     if (step.expect_error !== undefined) problems.push(`answered, where it should have been refused with "${step.expect_error}"`);
-    if (!problems.length && step.save) saved[step.save] = result;
     // Shown whether it passed or not: what a failed step saw is the first thing anyone asks.
     if (step.show) entry.shown = valueAt(result, step.show === true ? "" : step.show);
     return problems;
