@@ -1,0 +1,62 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Loom / Architectury
+.architectury-transformer/
+*.launch
+run/
+runs/
+run-data/
+
+# IDE — IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# IDE — Eclipse
+.classpath
+.project
+.settings/
+bin/
+eclipse/
+
+# IDE — VS Code
+.vscode/
+
+# IDE — Continue extension
+.continue/
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java
+*.class
+hs_err_pid*
+replay_pid*
+
+# Logs
+*.log
+
+# CodeGraph MCP index (local artifact, not shared)
+.codegraph/
+codegraph.db
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# Stray log dir a dev run can drop in a module
+common/logs/
+
+# Third-party mod jars used only to compile integrations against. They are
+# other people's All-Rights-Reserved artifacts, and each developer fetches
+# the versions they need - see docs/integrating-with-other-mods.md
+libs/
+
+# Node
+node_modules/

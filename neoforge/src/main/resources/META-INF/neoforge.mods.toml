@@ -1,0 +1,40 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+issueTrackerURL = "https://github.com/pain-o-d/mc_puppet/issues"
+license = "MIT"
+
+[[mods]]
+modId = "mc_puppet"
+version = "${version}"
+displayName = "MC Puppet"
+authors = "pain_o_d"
+description = '''
+Lets a program on the same machine see and drive a running game - screens,
+widgets, slots, clicks, screenshots, commands, world state - so mods can be
+tested without a person at the keyboard. Off by default, loopback only, token
+protected. Ships with an MCP server for AI coding agents.
+'''
+
+[[dependencies.mc_puppet]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.mc_puppet]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.mc_puppet]]
+modId = "architectury"
+type = "required"
+versionRange = "[13.0.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[mixins]]
+config = "mc_puppet.mixins.json"

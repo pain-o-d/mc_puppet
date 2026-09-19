@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "mc_puppet",
+  "version": "${version}",
+  "name": "MC Puppet",
+  "description": "Lets a program on the same machine see and drive a running game - screens, widgets, slots, clicks, screenshots, commands, world state - so mods can be tested without a person at the keyboard. Off by default, loopback only, token protected. Ships with an MCP server for AI coding agents.",
+  "authors": [
+    "pain_o_d"
+  ],
+  "contact": {
+    "sources": "https://github.com/pain-o-d/mc_puppet"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.curseforge.pain_o_d.mc_puppet.fabric.McPuppetFabric"
+    ]
+  },
+  "mixins": [
+    "mc_puppet.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "architectury": ">=13.0.0"
+  }
+}

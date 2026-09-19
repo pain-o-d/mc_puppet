@@ -1,0 +1,28 @@
+pluginManagement {
+    repositories {
+        // Artifacts mirrored by tools/fetch-architectury.sh — see that script
+        // for why maven.architectury.dev cannot be reached directly here.
+        mavenLocal()
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.architectury.dev/' }
+        maven { url = 'https://files.minecraftforge.net/maven/' }
+        gradlePluginPortal()
+        // architectury-plugin pulls gradle-idea-ext, which is only published to
+        // the plugin portal's legacy maven repo - gradlePluginPortal() alone
+        // does not expose it as a transitive dependency.
+        maven { url = 'https://plugins.gradle.org/m2/' }
+        mavenCentral()
+    }
+}
+
+// Auto-provisions the JDK 21 toolchain the mod targets, so the build does not
+// depend on which JDK happens to launch Gradle.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'mc_puppet'
+
+include 'common'
+include 'fabric'
+include 'neoforge'

@@ -1,0 +1,189 @@
+# MC Puppet
+
+Lets a program on the same machine **see and drive a running Minecraft**, so a
+mod can be tested without a person at the keyboard.
+
+A server can be driven from its console, and its logic tested with a fake
+player. A screen cannot. Whether a button is where it should be, whether a
+trading screen restates its offers without closing, whether a slot holds what
+the player was shown — that is only knowable in a client, and until now only
+by somebody looking at it. MC Puppet makes the client answer questions.
+
+- **See:** the open screen as data — every widget with its text, position and
+  state; a container's slots and cursor; a merchant's offers — plus the player,
+  chat, nearby entities, and a screenshot for what data cannot say.
+- **Do:** click widgets and slots, select a trade, press keys, type, run
+  commands, use an entity or a block — through the code paths a player uses.
+- **Get there:** create, open and leave worlds, resize the window, change the
+  GUI scale, quit, and wait *on the game's own tick* for a screen, a world, a
+  chat line.
+- **Server side too:** commands with their output captured, players and
+  inventories, entities with a villager's offers, a block and its contents.
+  More than RCON, and no password.
+- **Scenarios:** a JSON list of steps with expectations, run from a shell, CI,
+  or an AI coding agent through the bundled **MCP server**. A 24-step trading
+  test runs in under two seconds.
+
+Minecraft 1.21.1 · Fabric and NeoForge · needs [Architectury API](https://modrinth.com/mod/architectury-api) · MIT
+
+## Safety first
+
+This is remote control of a game, and it is built to be refused.
+
+- **Off by default.** Dropping the jar into a mods folder does nothing but log
+  one line. It is switched on by `"enabled": true` in `config/mc_puppet.json`
+  or by `-Dmc_puppet.enabled=true`.
+- **Loopback only.** It binds `127.0.0.1`. There is no setting that makes it
+  listen to a network.
+- **A token every start.** Each request must carry a 256-bit token made afresh
+  at startup and written to `<gameDir>/mc_puppet/endpoint-<side>.json`.
+  Reaching the port is not enough; a caller has to be able to read the game's
+  own files — and whoever can do that could already edit the world.
+- **A wrong token ends the connection.**
+- On a server it runs commands at operator level 4. Do not enable it on a
+  server whose machine you share with people you would not give the console.
+
+When it is on, it says so at `WARN` in the log, with the file that holds the
+token. **Do not ship a modpack with it enabled.**
+
+## Quick start
+
+1. Put the jar (and Architectury API) in `mods/`, or depend on it in your dev
+   environment (below).
+2. Start the game with `-Dmc_puppet.enabled=true`.
+3. Talk to it:
+
+```bash
+node tools/puppet/puppet.js --dir <gameDir> status
+node tools/puppet/puppet.js --dir <gameDir> client help
+node tools/puppet/puppet.js --dir <gameDir> client screen
+node tools/puppet/puppet.js --dir <gameDir> client click_widget text=Singleplayer
+node tools/puppet/puppet.js --dir <gameDir> server command '{"command":"time set day"}'
+node tools/puppet/puppet.js --dir <gameDir> run scenarios/trade-with-a-villager.json
+```
+
+`--dir` is a game directory or a mod project root: `run`, `fabric/run` and
+`neoforge/run` under it are looked in too. Without it, `MC_PUPPET_DIRS`
+(`;`-separated), then the current directory.
+
+### In a Loom / Architectury dev environment
+
+Drop the built jar into your project's `run/mods/` (Fabric remaps it), and
+either add `vmArg '-Dmc_puppet.enabled=true'` to your Loom run configs or put
+`{"enabled": true}` in `run/config/mc_puppet.json`. `run/` is normally
+gitignored, which is what you want: the switch stays on your machine.
+
+## Operations
+
+Ask the game — `help` on either side lists every operation with its arguments.
+In short:
+
+| Client | |
+|---|---|
+| `info` `screen` `player` `count` `chat` `entities` `screenshot` | seeing |
+| `click_widget` `click_at` `click_slot` `select_trade` `key` `type` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
+| `worlds` `create_world` `open_world` `leave_world` `window` `quit` `wait` | getting there |
+
+| Server | |
+|---|---|
+| `info` `players` `inventory` `count` `entities` `entity` `block` | seeing |
+| `command` (captured output, optional `as` a player) | doing |
+| `wait` (ticks, or players online) | |
+
+Both sides: `help`, and `batch` — several steps in one round trip.
+
+`screen` is the one to know. For a container it returns the panel's bounds,
+every non-empty slot with its on-screen position, the cursor stack, and for a
+merchant the offers *as displayed* (with discounts and demand applied) and
+which one is selected. Coordinates are scaled GUI pixels, the same space
+widgets live in, so "is this button outside the panel?" is arithmetic.
+
+## Scenarios
+
+```json
+{ "name": "the currency button restates the counter",
+  "steps": [
+    { "op": "use_entity", "args": { "type": "minecraft:villager" } },
+    { "op": "wait", "args": { "for": "screen", "value": "Merchant" } },
+    { "op": "screen", "save": "before",
+      "expect": [ { "path": "widgets[text~=Currency]", "exists": true },
+                  { "path": "offers#", "gte": 1 } ] },
+    { "op": "click_widget", "args": { "text": "Currency" } },
+    { "op": "screen",
+      "expect": [ { "path": "offers[0].buy.id", "not": "${before.offers[0].buy.id}" } ] },
+    { "side": "server", "op": "count", "args": { "player": "Puppet", "item": "minecraft:emerald" },
+      "expect": [ { "equals": 5 } ] } ] }
+```
+
+- A step is `{side?, op, args?, expect?, save?, show?, expect_error?, optional?, note?}`.
+  `side` defaults to `client`.
+- **Paths:** `a.b`, `a[2]`, `a[-1]`, `a[key=value]`, `a[key~=part]` (first
+  match, case-insensitive), `a#` (count). No path means the whole answer.
+- **Expectations:** `equals`, `not`, `contains`, `matches` (regex), `gt` `gte`
+  `lt` `lte`, `exists`. A failure says what was there instead.
+- **`save`** keeps an answer; `"${name.path}"` anywhere later reuses it, and a
+  string that is *only* a reference keeps the value's type.
+- **`expect_error`** passes a step that is refused with that text: test that
+  the game says no.
+- **`optional`** tries a step and carries on either way — a confirmation
+  dialog that may not appear.
+- Stops at the first failure unless `--keep-going`. Exit code 1 on failure, so
+  it drops into CI.
+
+`scenarios/trade-with-a-villager.json` is a worked example that checks a trade
+from both sides of the game and cleans up after itself.
+
+## For AI coding agents (MCP)
+
+`tools/puppet/mcp.js` is a dependency-free [MCP](https://modelcontextprotocol.io)
+server. Register it with your agent's host and point it at your project:
+
+```json
+"mc-puppet": {
+  "type": "stdio",
+  "command": "node",
+  "args": ["/path/to/mc_puppet/tools/puppet/mcp.js"],
+  "env": { "MC_PUPPET_DIRS": "/path/to/your_mod" }
+}
+```
+
+Five tools, deliberately: `puppet_status`, `puppet_help`, `puppet_call`,
+`puppet_run` (a whole scenario in one call, reporting only what failed or was
+asked to be shown) and `puppet_screenshot` (returns the image, so the model
+can look at it). The game describes its own operations, so the tool list stays
+short and every conversation pays less for it.
+
+## The protocol
+
+One JSON object a line, both ways, over TCP on `127.0.0.1`:
+
+```
+-> {"id": 7, "token": "…", "op": "screen", "args": {}}
+<- {"id": 7, "ok": true, "result": {…}}
+<- {"id": 7, "ok": false, "error": "no screen is open"}
+```
+
+The endpoint file says where: `{side, host, port, token, pid, started}`.
+Default ports are 25580 (client) and 25581 (server); if one is taken the next
+free one is used and the file says which. Requests may overlap; match answers
+by `id`. Ten lines of any language are enough — `tools/puppet/lib.js` is the
+reference.
+
+## Building
+
+```bash
+./gradlew build               # both loaders; jars in <loader>/build/libs/
+./gradlew :common:test        # the protocol, token, batch and waiting, without a game
+node --test tools/puppet/scenario.test.js   # the scenario language, without a game
+./gradlew :fabric:runClient   # a dev client with the bridge on, player "Puppet"
+```
+
+## Limits
+
+- A screenshot is the last rendered frame: the window must not be minimised.
+- Clicks go to the screen's own handlers, not through the OS, so anything a
+  mod does in raw input callbacks is not exercised.
+- `use_entity` and `use_block` are checked by the server like any player's:
+  stand within reach.
+- The client bridge reads what the client knows. For the truth, ask the
+  server — that both can be asked in one scenario is the point.
