@@ -291,7 +291,7 @@ public final class ClientOps {
             if (client.world != null) {
                 throw new Ops.Refused("a world is loaded; leave_world first");
             }
-            client.createIntegratedServerLoader().start(name, () -> client.setScreen(new TitleScreen()));
+            com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.openWorld(client, name);
             return JsonNull.INSTANCE;
         });
 
@@ -366,7 +366,7 @@ public final class ClientOps {
         info.addProperty("mod_version", dev.architectury.platform.Platform.getMod("mc_puppet").getVersion());
         info.addProperty("development", com.modrinth.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", net.minecraft.SharedConstants.getGameVersion().getName());
-        info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : "neoforge");
+        info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : com.modrinth.pain_o_d.mc_puppet.compat.Compat.OTHER_LOADER);
         info.addProperty("in_world", client.world != null && client.player != null);
         info.addProperty("singleplayer", client.isInSingleplayer());
         info.addProperty("screen", client.currentScreen == null ? null : client.currentScreen.getClass().getName());
@@ -764,12 +764,12 @@ public final class ClientOps {
         LevelInfo level = new LevelInfo(name, mode, false, difficulty == null ? Difficulty.NORMAL : difficulty,
                 Args.flag(args, "cheats", true), new GameRules(), DataConfiguration.SAFE_MODE);
         GeneratorOptions generator = new GeneratorOptions(seed, Args.flag(args, "structures", true), false);
-        client.createIntegratedServerLoader().createAndStart(name, level, generator,
+        com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.createWorld(client, name, level, generator,
                 registries -> {
                     WorldPreset preset = registries.get(RegistryKeys.WORLD_PRESET)
                             .entryOf(flat ? WorldPresets.FLAT : WorldPresets.DEFAULT).value();
                     return preset.createDimensionsRegistryHolder();
-                }, client.currentScreen);
+                });
         JsonObject json = new JsonObject();
         json.addProperty("name", name);
         // As text: a seed is sixty-four bits and a JSON number, to most readers, is fifty-three.

@@ -39,9 +39,11 @@ public final class GameJson {
         JsonObject json = new JsonObject();
         json.addProperty("id", Registries.ITEM.getId(stack.getItem()).toString());
         json.addProperty("count", stack.getCount());
-        if (!stack.getComponentChanges().isEmpty()) {
+        String data = com.modrinth.pain_o_d.mc_puppet.compat.Compat.dataOf(stack);
+        if (data != null) {
             json.addProperty("name", stack.getName().getString());
-            json.addProperty("components", cut(stack.getComponentChanges().toString()));
+            // Called "components" in both versions, so that a scenario reads one name: it is NBT before 1.20.5.
+            json.addProperty("components", cut(data));
         }
         if (stack.isDamaged()) {
             json.addProperty("damage", stack.getDamage());
@@ -108,8 +110,8 @@ public final class GameJson {
             one.addProperty("index", index++);
             // The displayed stack: what the screen shows and the game checks,
             // with any demand bonus and discount already in it.
-            one.add("buy", stack(offer.getDisplayedFirstBuyItem()));
-            ItemStack second = offer.getDisplayedSecondBuyItem();
+            one.add("buy", stack(com.modrinth.pain_o_d.mc_puppet.compat.Compat.firstBuy(offer)));
+            ItemStack second = com.modrinth.pain_o_d.mc_puppet.compat.Compat.secondBuy(offer);
             if (!second.isEmpty()) {
                 one.add("buy2", stack(second));
             }

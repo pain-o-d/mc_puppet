@@ -1,0 +1,28 @@
+pluginManagement {
+    repositories {
+        // Artifacts mirrored by ../tools/fetch-architectury.sh - see that script
+        // for why maven.architectury.dev cannot be reached directly here.
+        mavenLocal()
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.architectury.dev/' }
+        maven { url = 'https://files.minecraftforge.net/maven/' }
+        gradlePluginPortal()
+        // architectury-plugin pulls gradle-idea-ext, which is only published to
+        // the plugin portal's legacy maven repo.
+        maven { url = 'https://plugins.gradle.org/m2/' }
+        mavenCentral()
+    }
+}
+
+// Provisions the JDK 17 that Minecraft 1.20.1 targets, whichever JDK launches Gradle.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+// A build of its own, beside the 1.21.1 one at the repository's root, compiling
+// the same sources. See ../docs/MULTIVERSION.md.
+rootProject.name = 'mc_puppet-mc1.20.1'
+
+include 'common'
+include 'fabric'
+include 'forge'

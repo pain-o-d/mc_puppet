@@ -31,6 +31,9 @@ dev.architectury:at:1.0.1
 dev.architectury:architectury:13.0.11
 dev.architectury:architectury-fabric:13.0.11
 dev.architectury:architectury-neoforge:13.0.11
+dev.architectury:architectury:9.2.14
+dev.architectury:architectury-fabric:9.2.14
+dev.architectury:architectury-forge:9.2.14
 "
 
 fetch() {

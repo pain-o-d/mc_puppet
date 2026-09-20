@@ -1,0 +1,36 @@
+architectury {
+    common rootProject.enabled_platforms.split(',')
+}
+
+dependencies {
+    // We depend on Fabric Loader here to use the Fabric @Environment annotations,
+    // which get remapped to the correct annotations on each platform.
+    // Do NOT use other classes from Fabric Loader.
+    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    // Architectury API. This is optional, and you can comment it out if you don't need it.
+    modImplementation "dev.architectury:architectury:$rootProject.architectury_api_version"
+}
+
+// The sources are the 1.21.1 build's, reached by path: see ../../docs/MULTIVERSION.md.
+// What a version does its own way lives in a package called "compat", and each build
+// sees only its own: the shared tree's is left out here, and this module's is in
+// src/main/java as usual.
+def shared = file('../../common/src/main/java')
+sourceSets.main.java {
+    srcDir shared
+    exclude { element ->
+        element.file.toPath().startsWith(shared.toPath()) && element.relativePath.pathString.contains('/compat/')
+    }
+}
+sourceSets.test.java.srcDir file('../../common/src/test/java')
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}

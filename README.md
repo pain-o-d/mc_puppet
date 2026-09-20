@@ -340,6 +340,26 @@ Everything the bridge was asked to do is appended to
 (cut at 300 characters, never the token), how it ended, how long it took.
 What an unattended agent did to a game can be read back afterwards.
 
+## Minecraft versions
+
+| Minecraft | Loaders | Java | Built by |
+|---|---|---|---|
+| 1.21.1 | Fabric, NeoForge | 21 | the root build |
+| 1.20.1 | Fabric, Forge | 17 | `mc1.20.1/`, from the same sources |
+
+`tools/build-all.sh` builds all four jars. The tools, the protocol and the
+scenarios are the same for every version; `info` says which game and loader
+answered. Where the *game's own commands* differ between versions — an item's
+data is NBT before 1.20.5 and components since — a scenario writes the value
+both ways:
+
+```json
+{ "command": { "mc<1.20.5": "give @s diamond_sword{Enchantments:[{id:\"minecraft:sharpness\",lvl:3s}]}",
+               "else":      "give @s diamond_sword[enchantments={levels:{'minecraft:sharpness':3}}]" } }
+```
+
+`docs/MULTIVERSION.md` says how the two builds share their sources.
+
 ## Building
 
 ```bash

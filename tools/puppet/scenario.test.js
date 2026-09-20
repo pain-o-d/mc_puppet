@@ -75,6 +75,9 @@ function fake(answers) {
   return {
     calls,
     async call(side, op, args) {
+      // The runner asks which version the game is before it starts; a game that was not
+      // scripted to say is one that cannot, and that question is not part of the scenario.
+      if (op === "info" && !("info" in answers)) throw new Error("no such operation");
       calls.push({ side, op, args });
       const answer = answers[op];
       if (answer instanceof Error) throw answer;
@@ -159,6 +162,7 @@ function scripted(answers) {
   return {
     asked,
     call: async (side, op, args) => {
+      if (op === "info" && !("info" in answers)) throw new Error("no such operation");
       asked.push({ side, op, args });
       const next = answers[op];
       const answer = Array.isArray(next) ? (next.length > 1 ? next.shift() : next[0]) : next;
@@ -421,4 +425,22 @@ test("consent is one directory at a time, kept in the home directory, and can be
   } finally {
     fsReal.rmSync(home, { recursive: true, force: true });
   }
+});
+
+test("a value may depend on the game's version, since the game's commands do", async () => {
+  const { forVersion, compareVersions } = require("./scenario");
+  assert.equal(compareVersions("1.20.1", "1.20.5"), -1);
+  assert.equal(compareVersions("1.21.1", "1.20.5"), 1);
+  assert.equal(compareVersions("1.21", "1.21.0"), 0);
+  const give = { command: { "mc<1.20.5": "give @s sword{Enchantments:[]}", "else": "give @s sword[enchantments={}]" } };
+  assert.deepEqual(forVersion(give, "1.20.1"), { command: "give @s sword{Enchantments:[]}" });
+  assert.deepEqual(forVersion(give, "1.21.1"), { command: "give @s sword[enchantments={}]" });
+  assert.deepEqual(forVersion(give, undefined), { command: "give @s sword[enchantments={}]" }, "nobody to ask: else");
+  // An ordinary object is left alone, however it is keyed.
+  assert.deepEqual(forVersion({ equals: { id: "minecraft:apple", count: 4 } }, "1.20.1"), { equals: { id: "minecraft:apple", count: 4 } });
+  assert.deepEqual(forVersion({ expect: [{ path: "a", equals: { "mc>=1.21": 2, "else": 1 } }] }, "1.21.1"), { expect: [{ path: "a", equals: 2 }] });
+
+  const puppet = scripted({ info: { minecraft: "1.20.1" }, command: {} });
+  await run(puppet, { steps: [{ side: "server", op: "command", args: give }] });
+  assert.deepEqual(puppet.asked.find((each) => each.op === "command").args, { command: "give @s sword{Enchantments:[]}" });
 });

@@ -1,0 +1,27 @@
+{
+  "required": true,
+  "package": "com.modrinth.pain_o_d.mc_puppet.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "minVersion": "0.8",
+  "client": [
+    "BossBarHudAccessor",
+    "DrawContextMixin",
+    "GameRendererMixin",
+    "HandledScreenAccessor",
+    "InGameHudAccessor",
+    "InGameHudMixin",
+    "InputUtilMixin",
+    "KeyboardInvoker",
+    "MerchantScreenAccessor",
+    "MinecraftClientInvoker",
+    "MouseInvoker",
+    "ScreenMixin",
+    "SliderWidgetAccessor",
+    "SystemToastAccessor",
+    "ToastManagerMixin"
+  ],
+  "mixins": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
