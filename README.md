@@ -272,7 +272,12 @@ a case, the game's logged errors a case of their own.
 `puppet launch client --loader fabric --world my_world` starts the dev game
 through the project's Gradle wrapper, waits for the bridge and the world, and
 `puppet stop` asks it to quit, which unlike killing Gradle leaves nothing
-holding the world's lock.
+holding the world's lock. A developer's dedicated server is seen out as well:
+some development environments keep its process alive after it has stopped,
+holding the remapped mod jars, and the next launch fails with *Failed to
+remap mods*. With MC Puppet on, a process still there ten seconds after its
+server stopped is ended. Only in a development environment, only a dedicated
+server, and only after the worlds are saved.
 
 **More than one game.** Name game directories — `--dir a=run1 --dir b=run2` or
 `MC_PUPPET_DIRS=a=run1;b=run2` — and a step says `"side": "client@b"`. One

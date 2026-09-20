@@ -114,6 +114,8 @@ after it rests on it.
 - [ ] The tools on npm (`npx mc-puppet`, and as an MCP server); the mod on
       Modrinth, which is also its Maven.
 - [ ] An exit of its own for a client started with `pretend_production`.
+- [x] A developer's dedicated server that has stopped does not leave its
+      process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
 
 ## What the phases taught
 
