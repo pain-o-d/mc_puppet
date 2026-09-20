@@ -24,7 +24,7 @@ by somebody looking at it. MC Puppet makes the client answer questions.
   or an AI coding agent through the bundled **MCP server**. A 24-step trading
   test runs in under two seconds.
 
-Minecraft 1.21.1 · Fabric and NeoForge · needs [Architectury API](https://modrinth.com/mod/architectury-api) · MIT
+Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) · needs [Architectury API](https://modrinth.com/mod/architectury-api) · MIT
 
 ## Safety first
 
@@ -87,9 +87,27 @@ node tools/puppet/puppet.js --dir <gameDir> run scenarios/trade-with-a-villager.
 
 ### In a Loom / Architectury dev environment
 
-Drop the built jar into your project's `run/mods/` (Fabric remaps it), and
-either add `vmArg '-Dmc_puppet.enabled=true'` to your Loom run configs or put
-`{"enabled": true}` in `run/config/mc_puppet.json`. `run/` is normally
+**Fabric:** drop the jar into your project's `run/mods/`; Fabric Loader remaps
+it as the game starts.
+
+**Forge and NeoForge:** not `run/mods/`. Their jars are in SRG or Mojang names
+and a dev run is in your mappings', and nothing remaps a file in a folder: the
+game dies on the first Minecraft class the mod names. Make it a dependency
+instead, and Loom remaps it:
+
+```groovy
+dependencies {
+    // In a dev run only: never in your jar, never in your published dependencies.
+    modLocalRuntime "maven.modrinth:mc-puppet:<version>"
+}
+```
+
+(with `https://api.modrinth.com/maven` among your repositories, limited to the
+`maven.modrinth` group). ForgeGradle and NeoGradle have their own words for a
+runtime-only mod dependency; the point is the same.
+
+Then switch it on: add `vmArg '-Dmc_puppet.enabled=true'` to your run configs,
+or put `{"enabled": true}` in `run/config/mc_puppet.json`. `run/` is normally
 gitignored, which is what you want: the switch stays on your machine.
 
 ## Operations
@@ -368,7 +386,9 @@ both ways:
 ## Building
 
 ```bash
-./gradlew build               # both loaders; jars in <loader>/build/libs/
+tools/build-all.sh            # all four jars, and every test
+node tools/prod-check.js --eula   # the built jar in a real server: nothing opens without consent
+./gradlew build               # 1.21.1, both loaders; jars in <loader>/build/libs/
 ./gradlew :common:test        # the protocol, token, batch and waiting, without a game
 node --test tools/puppet/scenario.test.js   # the scenario language, without a game
 ./gradlew :fabric:runClient   # a dev client with the bridge on, player "Puppet"
