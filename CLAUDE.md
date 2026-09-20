@@ -22,7 +22,7 @@ whose `CLAUDE.md` explains the workaround in full
 | `tools/puppet/` | `lib.js` (discovery + connection), `scenario.js` (the scenario language), `puppet.js` (CLI), `mcp.js` (MCP server). No dependencies. |
 | `scenarios/` | Worked examples, runnable against a dev client. |
 
-Base package `com.curseforge.pain_o_d.mc_puppet`, mod id `mc_puppet`.
+Base package `com.modrinth.pain_o_d.mc_puppet`, mod id `mc_puppet`.
 
 ## Commands
 

@@ -14,7 +14,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.curseforge.pain_o_d.mc_puppet.fabric.McPuppetFabric"
+      "com.modrinth.pain_o_d.mc_puppet.fabric.McPuppetFabric"
     ]
   },
   "mixins": [
