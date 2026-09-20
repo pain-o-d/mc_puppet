@@ -12,6 +12,9 @@
  *   node puppet.js launch client --loader fabric --world my_world
  *                                                 start a dev game, wait for its bridge (and the world)
  *   node puppet.js stop                           quit the client, stop the server
+ *   node puppet.js allow <gameDir>                let this game be driven outside a development
+ *                                                 environment (a real launcher's instance); "disallow"
+ *                                                 takes it back, "allowed" lists them
  *
  *   --dir <gameDir>   where to look (repeatable); else MC_PUPPET_DIRS, else here.
  *                     name=<gameDir> names a game: "side": "client@name" in a scenario
@@ -74,6 +77,26 @@ async function main() {
     const [first, ...rest] = words;
     if (!first || first === "--help" || first === "-h") {
       console.log(fs.readFileSync(__filename, "utf8").split("*/")[0].replace(/^#!.*\n\/\*\*\n?/, "").replace(/^ \* ?/gm, ""));
+      return 0;
+    }
+    if (first === "allow" || first === "disallow") {
+      if (!rest[0]) throw new Error(`${first} which game directory? the folder with mods/ and config/ in it`);
+      const lib = require("./lib");
+      const target = path.resolve(rest[0]);
+      if (first === "allow" && !fs.existsSync(path.join(target, "mods")) && !fs.existsSync(path.join(target, "config"))) {
+        throw new Error(`${target} has no mods/ or config/ in it, so it does not look like a game directory`);
+      }
+      const kept = lib.setAllowed(target, first === "allow");
+      console.log(first === "allow"
+        ? `${target} may now be driven when MC Puppet is switched on there. Written to ${lib.consentFile()}`
+        : `${target} may no longer be driven.`);
+      console.log(kept.length ? "allowed: " + kept.join(", ") : "nothing is allowed outside development environments");
+      return 0;
+    }
+    if (first === "allowed") {
+      const lib = require("./lib");
+      const kept = lib.readAllowed();
+      console.log(kept.length ? kept.join("\n") : "nothing is allowed outside development environments");
       return 0;
     }
     if (first === "status") {

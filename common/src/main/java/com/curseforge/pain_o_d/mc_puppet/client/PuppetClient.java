@@ -60,6 +60,18 @@ public final class PuppetClient {
             return CompoundEventResult.pass();
         });
         ClientTickEvent.CLIENT_POST.register(client -> waiter.tick());
+
+        // Outside a development environment the person playing may not be the person who
+        // switched this on, and a line in a log is not somewhere a player looks. Said in
+        // chat on joining a world, every time, for as long as the bridge is open.
+        dev.architectury.event.events.client.ClientPlayerEvent.CLIENT_PLAYER_JOIN.register(player -> {
+            if (bridge != null && !com.curseforge.pain_o_d.mc_puppet.McPuppet.development()) {
+                player.sendMessage(net.minecraft.text.Text.literal("[MC Puppet] This game can be controlled by "
+                        + "programs on this computer: a mod testing tool is switched on. If you did not do that, "
+                        + "remove the mc_puppet mod or set \"enabled\": false in config/mc_puppet.json.")
+                        .formatted(net.minecraft.util.Formatting.GOLD), false);
+            }
+        });
         Recorder.init();
 
         ClientTickEvent.CLIENT_POST.register(client -> {

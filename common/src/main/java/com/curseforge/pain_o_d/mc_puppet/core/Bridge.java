@@ -92,7 +92,9 @@ public final class Bridge implements AutoCloseable {
         endpoint.addProperty("token", token);
         endpoint.addProperty("pid", ProcessHandle.current().pid());
         endpoint.addProperty("started", System.currentTimeMillis());
+        endpoint.addProperty("protocol", Protocol.VERSION);
         Files.writeString(endpointFile, Protocol.GSON.toJson(endpoint), StandardCharsets.UTF_8);
+        keepToTheOwner(endpointFile);
 
         Bridge bridge = new Bridge(side, ops, token, socket, endpointFile);
         Thread acceptor = new Thread(bridge::accept, "mc_puppet-" + side + "-accept");
@@ -101,6 +103,22 @@ public final class Bridge implements AutoCloseable {
         LOGGER.warn("MC Puppet is ON for the {}: listening on 127.0.0.1:{}. Anything that can read {} "
                 + "can drive this game. Switch it off when not testing.", side, socket.getLocalPort(), endpointFile);
         return bridge;
+    }
+
+    /**
+     * The token is what stands between this game and any program on the
+     * machine, and it is in this file. Where the file system can say so, only
+     * its owner may read it. Windows cannot be told this way; a profile
+     * directory there is the owner's already.
+     */
+    private static void keepToTheOwner(Path file) {
+        try {
+            if (file.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            }
+        } catch (IOException | UnsupportedOperationException | SecurityException unimportant) {
+            // As readable as the directory it is in, which is what it was before this was tried.
+        }
     }
 
     private static ServerSocket bind(int port) throws IOException {

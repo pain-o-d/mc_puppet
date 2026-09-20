@@ -10,6 +10,56 @@ const fs = require("fs");
 const net = require("net");
 const path = require("path");
 
+/**
+ * The versions of the protocol these tools speak. The mod says which it speaks in its endpoint
+ * file. The two are installed separately and will not always be of an age, and a mismatch should
+ * be reported as one, not as an operation that mysteriously is not there.
+ */
+const PROTOCOLS = [1];
+
+/** What is wrong between these tools and a game's mod, in words, or null. */
+function mismatch(endpoint) {
+  const theirs = endpoint.protocol;
+  if (theirs === undefined) {
+    return "the MC Puppet mod in that game is older than these tools and does not say which protocol it speaks; "
+      + "update the mod";
+  }
+  if (PROTOCOLS.includes(theirs)) return null;
+  return theirs > Math.max(...PROTOCOLS)
+    ? `the MC Puppet mod in that game speaks protocol ${theirs} and these tools only ${PROTOCOLS.join(", ")}; update the tools (npm i -g mc-puppet@latest)`
+    : `the MC Puppet mod in that game speaks protocol ${theirs}, which these tools no longer do (${PROTOCOLS.join(", ")}); update the mod`;
+}
+
+/** Where consent to drive a game outside a development environment is kept: see the mod's Consent. */
+function consentFile(home = require("os").homedir()) {
+  return path.join(home, ".mc_puppet", "allowed.json");
+}
+
+function readAllowed(home) {
+  try {
+    const read = JSON.parse(fs.readFileSync(consentFile(home), "utf8"));
+    return Array.isArray(read.allowed) ? read.allowed.filter((each) => typeof each === "string") : [];
+  } catch (absent) {
+    return [];
+  }
+}
+
+const sameDir = (a, b) => path.resolve(a).replace(/\\/g, "/").toLowerCase() === path.resolve(b).replace(/\\/g, "/").toLowerCase();
+
+/** Allows, or with allow false stops allowing, one game directory to be driven. Returns the list as it then is. */
+function setAllowed(gameDir, allow, home) {
+  const file = consentFile(home);
+  const kept = readAllowed(home).filter((each) => !sameDir(each, gameDir));
+  if (allow) kept.push(path.resolve(gameDir));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    _: "Game directories that programs on this machine may drive through MC Puppet, outside a development "
+      + "environment. Written by: mc-puppet allow <gameDir>. Nothing you download should ever write here.",
+    allowed: kept,
+  }, null, 2) + "\n");
+  return kept;
+}
+
 /** Where a game directory usually is, relative to a mod project's root. */
 const USUAL_DIRS = [".", "run", "fabric/run", "neoforge/run", "forge/run", "common/run"];
 
@@ -191,6 +241,8 @@ class Puppet {
         + `-Dmc_puppet.enabled=true (or "enabled": true in config/mc_puppet.json); `
         + `looked under: ${(this.dirs && this.dirs.length ? this.dirs : [process.env.MC_PUPPET_DIRS || "."]).join(", ")}`);
     }
+    const wrong = mismatch(live);
+    if (wrong) throw new Error(wrong);
     const held = this.connections.get(sideName);
     if (held && held.endpoint.token === live.token && held.socket) return held;
     if (held) held.close();
@@ -210,4 +262,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, Connection, Puppet, parseSide, named };
+module.exports = { discover, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };

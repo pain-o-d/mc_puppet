@@ -362,6 +362,9 @@ public final class ClientOps {
     private static JsonElement info(MinecraftClient client) {
         JsonObject info = new JsonObject();
         info.addProperty("side", "client");
+        info.addProperty("protocol", com.curseforge.pain_o_d.mc_puppet.core.Protocol.VERSION);
+        info.addProperty("mod_version", dev.architectury.platform.Platform.getMod("mc_puppet").getVersion());
+        info.addProperty("development", com.curseforge.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", net.minecraft.SharedConstants.getGameVersion().getName());
         info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : "neoforge");
         info.addProperty("in_world", client.world != null && client.player != null);

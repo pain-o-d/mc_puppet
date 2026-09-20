@@ -39,12 +39,31 @@ This is remote control of a game, and it is built to be refused.
   at startup and written to `<gameDir>/mc_puppet/endpoint-<side>.json`.
   Reaching the port is not enough; a caller has to be able to read the game's
   own files — and whoever can do that could already edit the world.
-- **A wrong token ends the connection.**
+- **A wrong token ends the connection.** Where the file system can say so, the
+  file holding it is readable by its owner alone.
+- **Outside a development environment the switch is not enough.** A modpack
+  ships its `config/` folder, so a developer who tests with MC Puppet and then
+  exports the instance ships `"enabled": true` to every player of it — and a
+  second key in the same file would ship right beside the first. In a game
+  not started from Gradle or an IDE, the bridge also needs **consent kept
+  where a pack cannot put it**: `~/.mc_puppet/allowed.json`, naming that game
+  directory. `mc-puppet allow <gameDir>` writes it, one directory at a time,
+  no wildcard; `disallow` takes it back. Without it the mod logs why it
+  stayed off and what to run.
+- **When it is on outside development, the player is told** in chat on joining
+  a world, every time. A log is not somewhere a player looks.
 - On a server it runs commands at operator level 4. Do not enable it on a
   server whose machine you share with people you would not give the console.
 
 When it is on, it says so at `WARN` in the log, with the file that holds the
-token. **Do not ship a modpack with it enabled.**
+token. **Do not ship a modpack with it enabled** — and if one ever is, the
+above is why it still does nothing on a player's machine.
+
+**The mod and these tools are installed separately**, and say which version of
+the protocol they speak: the mod in its endpoint file and in `info`, the tools
+in `lib.js`. A mismatch is reported as one, naming which to update, and not as
+an operation that mysteriously is not there. Pin an exact version of each in
+a project; test infrastructure should not change by itself.
 
 ## Quick start
 

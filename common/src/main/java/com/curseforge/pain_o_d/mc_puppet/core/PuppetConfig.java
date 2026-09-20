@@ -23,7 +23,29 @@ import com.google.gson.JsonParseException;
  * <p>There is deliberately no setting for the address. It is the loopback,
  * always.
  */
-public record PuppetConfig(boolean enabled, int clientPort, int serverPort) {
+public record PuppetConfig(boolean enabled, int clientPort, int serverPort, boolean refusedForWantOfConsent) {
+
+    /** As a development environment reads it: a switch is all it takes. */
+    public PuppetConfig(boolean enabled, int clientPort, int serverPort) {
+        this(enabled, clientPort, serverPort, false);
+    }
+
+    /**
+     * Reads the config, and outside a development environment asks for
+     * consent as well. See {@link Consent} for why a switch is not enough
+     * there.
+     *
+     * @param development whether this is a mod developer's run, from Gradle or an IDE
+     * @param gameDir     the directory that would be driven
+     * @param home        where consent is kept; the user's home directory
+     */
+    public static PuppetConfig load(Path configDir, boolean development, Path gameDir, Path home) {
+        PuppetConfig asked = load(configDir);
+        if (!asked.enabled() || development || Consent.given(home, gameDir)) {
+            return asked;
+        }
+        return new PuppetConfig(false, asked.clientPort(), asked.serverPort(), true);
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger("mc_puppet");
 
