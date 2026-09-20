@@ -97,6 +97,16 @@ are optional, and the build says "Cannot remap drawGuiTexture" and goes on.
 
 ## What only running it found
 
+- **A dedicated dev server never exits.** Found by a mod that uses this one,
+  on the first day it ran a 1.20.1 server, and then seen on every target:
+  after `stop` the worlds are saved, the ports closed, and the JVM stays,
+  kept by Architectury Transformer's thread pools, which are not daemons. What was left held the remapped mod jars, and the next
+  launch failed with *Failed to remap mods*. `core/Leaving` gives a stopped
+  dedicated server's process ten seconds and then ends it, in a development
+  environment only. Seen: gone 14 seconds after `stop`, Gradle exiting 0.
+  A crash *before* the server starts still leaves a process: nothing of this
+  mod is running yet to see it out.
+
 - **Under Forge the bridge listened on `::1`.** `InetAddress.getLoopbackAddress()`
   is whichever loopback the JVM prefers, and Forge starts the game preferring
   IPv6; the endpoint file and the log both said 127.0.0.1, and nobody could

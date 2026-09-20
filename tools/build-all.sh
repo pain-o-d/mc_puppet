@@ -9,6 +9,6 @@ echo "== Minecraft 1.21.1 (Fabric, NeoForge)"
 echo "== Minecraft 1.20.1 (Fabric, Forge)"
 (cd mc1.20.1 && ./gradlew build "$@")
 echo "== tools"
-node --test tools/puppet/scenario.test.js | grep -E "^. (pass|fail)"
+node --test tools/puppet/scenario.test.js | grep -E "(pass|fail) [0-9]+$"
 echo
 ls fabric/build/libs neoforge/build/libs mc1.20.1/fabric/build/libs mc1.20.1/forge/build/libs | grep -E "\.jar$" | grep -v -E "dev|sources"

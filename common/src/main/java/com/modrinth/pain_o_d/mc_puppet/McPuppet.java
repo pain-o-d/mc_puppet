@@ -85,6 +85,13 @@ public final class McPuppet {
                 open.close();
             }
         });
+        LifecycleEvent.SERVER_STOPPED.register(server -> {
+            // A developer's dedicated server only: a client goes on living after the server inside
+            // it stops, and anybody else's process is theirs to end.
+            if (server.isDedicated() && development()) {
+                com.modrinth.pain_o_d.mc_puppet.core.Leaving.seeTheProcessOut();
+            }
+        });
         TickEvent.SERVER_POST.register(server -> SERVER_WAITER.tick());
 
         if (Platform.getEnvironment() == Env.CLIENT) {
