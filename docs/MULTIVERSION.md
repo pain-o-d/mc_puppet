@@ -46,23 +46,65 @@ and where that method differs the mixin is the difference. Those go in
 
 ## Steps
 
-- [ ] Artifacts for 1.20.1 on this machine: Architectury API 9.2.14 mirrored
-      through `tools/fetch-architectury.sh` (the big-file problem with
-      `maven.architectury.dev`), the rest from repositories that work.
-- [ ] `mc1.20.1/` builds an empty mod on Fabric and Forge: the environment
-      proven before our code is in it.
-- [ ] The shared sources compile against 1.20.1. Every error is either a seam
-      to cut or a mixin to fork; list them here as they are found.
-- [ ] The core's unit tests pass in both builds.
-- [ ] Fabric 1.20.1 runs; `scenarios/trade-with-a-villager.json` and
-      `scenarios/eyes-and-hands.json` pass **unchanged**.
-- [ ] Forge 1.20.1 runs; the same two pass.
-- [ ] `tools/puppet` knows nothing of versions, and `status` says which one a
-      game is.
-- [ ] One command builds all four jars; names carry the version:
-      `mc_puppet-forge-0.1.0+mc1.20.1.jar`.
-- [ ] README, CLAUDE.md and the release notes say how.
+- [x] Artifacts for 1.20.1 on this machine: Architectury API 9.2.14 mirrored
+      through `tools/fetch-architectury.sh`, the rest from repositories that
+      work.
+- [x] `mc1.20.1/` builds an empty mod on Fabric and Forge: the owner's
+      template, with the plugins pinned, the mirror consulted, a Java 17
+      toolchain, and the new package.
+- [x] The shared sources compile against 1.20.1. Twenty-five errors in eight
+      files, every one of them now behind `compat/`; see below.
+- [x] The core's unit tests pass in both builds.
+- [x] **Fabric 1.20.1** runs; both scenarios pass, 24 of 24 and 47 of 47.
+- [x] **Forge 1.20.1** runs; the same two pass.
+- [x] 1.21.1 seen again afterwards on Fabric and NeoForge, since the sources it
+      is built from changed; and a real mod's scenarios against the new jar.
+- [x] `tools/puppet` knows nothing of versions, and `info` says which one a
+      game is, and which loader.
+- [x] `tools/build-all.sh` builds all four jars, and the 1.20.1 ones carry the
+      version: `mc_puppet-forge-0.1.0+mc1.20.1.jar`.
+- [ ] The 1.21.1 jars should carry theirs too (`+mc1.21.1`), before anything
+      is published.
+- [ ] A dedicated server on 1.20.1 has not been run; on 1.21.1 it has.
 
 ## Seams found
 
-*(filled in as the compiler finds them)*
+All of it, for a mod that reads screens and sends input. The game's GUI,
+input and entities are nearly the same in the two versions; what moved is
+around them.
+
+| In `compat/` | 1.20.1 | 1.21.1 |
+|---|---|---|
+| `Compat.dataOf` | a stack carries NBT | components, from 1.20.5 |
+| `Compat.firstBuy` / `secondBuy` | `getAdjustedFirstBuyItem`, `getSecondBuyItem` | `getDisplayed…` |
+| `Compat.msPerTick` | `getTickTime`, a float of milliseconds | `getAverageNanosPerTick` |
+| `Compat.reportingTo` | brigadier's `ResultConsumer` | `ReturnValueConsumer` |
+| `Compat.nbtOf` | no registries needed | registries needed |
+| `Compat.idOf` (an effect) | the effect, looked up | a registry entry with a key |
+| `Compat.OTHER_LOADER` | forge | neoforge |
+| `ClientCompat.updateCrosshair` | `updateTargetedEntity` | `updateCrosshairTarget` |
+| `ClientCompat.openWorld` / `createWorld` | a parent screen first; no parent | a cancel callback; a parent |
+| `ClientCompat.onSound` | two arguments | three |
+| `ClientCompat.sidebarOf` / `linesOf` | slot 1, `ScoreboardPlayerScore` | an enum, `ScoreboardEntry` |
+
+**Mixins turned out not to need forking**, which was the surprise. The two
+that named something version-specific were made not to: `DrawContextMixin`
+takes its tooltip's `Optional<?>` unnamed, since `TooltipData` moved packages
+and erases to the same descriptor; `GameRendererMixin` asks for none of
+`render`'s arguments, which are a tick counter in one version and a float and
+a long in the other. The sprite hooks name a method 1.20.1 does not have; they
+are optional, and the build says "Cannot remap drawGuiTexture" and goes on.
+
+## What only running it found
+
+- **Under Forge the bridge listened on `::1`.** `InetAddress.getLoopbackAddress()`
+  is whichever loopback the JVM prefers, and Forge starts the game preferring
+  IPv6; the endpoint file and the log both said 127.0.0.1, and nobody could
+  connect. The bridge binds 127.0.0.1 in so many bytes now, and a test dials
+  it that way. Not a 1.20.1 matter at all: any JVM told to prefer IPv6 had it.
+- **A scenario speaks to the game as well as to the mod**, in commands, and
+  their language changed: an item's data is NBT before 1.20.5 and components
+  since. A summoned villager had no offers and a sword was never given. A
+  value in a scenario may now depend on the version —
+  `{"mc<1.20.5": "…", "else": "…"}` — and the two scenarios have one command
+  each written both ways. Everything else in them is unchanged.

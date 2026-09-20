@@ -8,6 +8,19 @@ loom {
     }
 }
 
+// A dev run is what this mod is for: on, and with a player whose name and world
+// survive from one run to the next. Loom otherwise invents a new name each time.
+loom {
+    runs {
+        configureEach {
+            vmArg '-Dmc_puppet.enabled=true'
+        }
+        client {
+            programArgs '--username', 'Puppet'
+        }
+    }
+}
+
 architectury {
     platformSetupLoomIde()
     forge()

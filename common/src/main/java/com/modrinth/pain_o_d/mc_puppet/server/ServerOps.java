@@ -111,7 +111,7 @@ public final class ServerOps {
         java.nio.file.Path save = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT).toAbsolutePath().normalize();
         info.addProperty("world_name", save.getFileName() == null ? null : save.getFileName().toString());
         info.addProperty("ticks", server.getTicks());
-        info.addProperty("ms_per_tick", Math.round(server.getAverageNanosPerTick() / 10_000.0) / 100.0);
+        info.addProperty("ms_per_tick", Math.round(com.modrinth.pain_o_d.mc_puppet.compat.Compat.msPerTick(server) * 100) / 100.0);
         info.addProperty("players", server.getCurrentPlayerCount());
         JsonArray worlds = new JsonArray();
         for (ServerWorld world : server.getWorlds()) {
@@ -166,7 +166,7 @@ public final class ServerOps {
         }
         int[] result = {0};
         boolean[] success = {false};
-        source = source.withReturnValueConsumer((successful, value) -> {
+        source = com.modrinth.pain_o_d.mc_puppet.compat.Compat.reportingTo(source, (successful, value) -> {
             success[0] = successful;
             result[0] = value;
         });
@@ -296,7 +296,7 @@ public final class ServerOps {
         BlockEntity blockEntity = world.getBlockEntity(pos);
         if (blockEntity != null && Args.flag(args, "nbt", true)) {
             json.addProperty("nbt", GameJson.cut(
-                    blockEntity.createNbtWithIdentifyingData(world.getRegistryManager()).toString()));
+                    com.modrinth.pain_o_d.mc_puppet.compat.Compat.nbtOf(blockEntity, world)));
         }
         return json;
     }

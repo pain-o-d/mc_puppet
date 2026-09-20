@@ -55,7 +55,7 @@ final class Body {
                 "Turns the head: to angles, at a point, or at an entity. Returns what the crosshair is then on.",
                 args -> {
                     look(client, args);
-                    client.gameRenderer.updateCrosshairTarget(1f);
+                    com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
                     return Sight.hit(client, client.crosshairTarget);
                 });
 
@@ -91,7 +91,7 @@ final class Body {
                     if (args.has("entity") || args.has("type")) {
                         look(client, args);
                     }
-                    client.gameRenderer.updateCrosshairTarget(1f);
+                    com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
                     JsonElement target = Sight.hit(client, client.crosshairTarget);
                     MinecraftClientInvoker game = (MinecraftClientInvoker) client;
                     // Not holding the button clears the pause the game puts on attacks after a screen closes.
@@ -300,7 +300,7 @@ final class Body {
         }
         String was = Registries.BLOCK.getId(client.world.getBlockState(pos).getBlock()).toString();
         player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, Vec3d.ofCenter(pos));
-        client.gameRenderer.updateCrosshairTarget(1f);
+        com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
         if (!(client.crosshairTarget instanceof BlockHitResult aimed) || !aimed.getBlockPos().equals(pos)) {
             String instead = client.crosshairTarget instanceof BlockHitResult other
                     ? "the block at " + other.getBlockPos().toShortString()
@@ -316,7 +316,7 @@ final class Body {
                         throw new IllegalStateException("the world went away while breaking");
                     }
                     if (!client.world.getBlockState(pos).isOf(Registries.BLOCK.get(
-                            net.minecraft.util.Identifier.of(was)))) {
+                            net.minecraft.util.Identifier.tryParse(was)))) {
                         JsonObject json = new JsonObject();
                         json.addProperty("broke", was);
                         json.addProperty("ticks", ticks[0]);
@@ -324,7 +324,7 @@ final class Body {
                     }
                     ticks[0]++;
                     client.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, Vec3d.ofCenter(pos));
-                    client.gameRenderer.updateCrosshairTarget(1f);
+                    com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
                     game.mc_puppet$handleBlockBreaking(true);
                     return null;
                 });

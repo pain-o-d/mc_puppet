@@ -269,4 +269,23 @@ class CoreTest {
             }
         }
     }
+
+    @Test
+    @DisplayName("the bridge listens on 127.0.0.1 itself, whichever loopback the JVM prefers")
+    void listensWhereTheFileSays(@TempDir Path gameDir) throws Exception {
+        Bridge bridge = Bridge.open("test", ops(), 0, gameDir);
+        try {
+            JsonObject endpoint = json(Files.readString(gameDir.resolve("mc_puppet").resolve("endpoint-test.json")));
+            assertEquals("127.0.0.1", endpoint.get("host").getAsString());
+            // Dialled as the tools dial it: by that address, not by "localhost", which a JVM
+            // started preferring IPv6 resolves to ::1. Forge starts the game that way, and the
+            // bridge listened there while the file said here.
+            try (Socket socket = new Socket(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}),
+                    endpoint.get("port").getAsInt())) {
+                assertTrue(socket.isConnected());
+            }
+        } finally {
+            bridge.close();
+        }
+    }
 }

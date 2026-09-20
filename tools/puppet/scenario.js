@@ -130,6 +130,48 @@ function substitute(value, saved) {
   return value;
 }
 
+/** -1, 0 or 1: "1.20.1" against "1.20.5", number by number, a missing one being zero. */
+function compareVersions(a, b) {
+  const left = String(a).split(".").map(Number);
+  const right = String(b).split(".").map(Number);
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const difference = (left[index] || 0) - (right[index] || 0);
+    if (difference) return difference < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+const VERSION_KEY = /^mc(<=|>=|<|>|=)(\d+(?:\.\d+)*)$/;
+
+/**
+ * A value that depends on the game's version:
+ *
+ *   { "mc<1.20.5": "give @s diamond_sword{Enchantments:[…]}", "else": "give @s diamond_sword[enchantments={…}]" }
+ *
+ * The mod hides what differs between versions of the game from a scenario, but a scenario
+ * also speaks to the game directly, in commands, and their language changed: an item's data
+ * was NBT before 1.20.5 and is components since. An object whose every key is such a test,
+ * or "else", is replaced by the first that holds. With no game to ask, "else".
+ */
+function forVersion(value, minecraft) {
+  if (Array.isArray(value)) return value.map((each) => forVersion(each, minecraft));
+  if (!value || typeof value !== "object") return value;
+  const keys = Object.keys(value);
+  if (keys.length && keys.every((key) => key === "else" || VERSION_KEY.test(key))) {
+    for (const key of keys) {
+      const test = VERSION_KEY.exec(key);
+      if (!test || !minecraft) continue;
+      const compared = compareVersions(minecraft, test[2]);
+      const holds = { "<": compared < 0, "<=": compared <= 0, ">": compared > 0, ">=": compared >= 0, "=": compared === 0 }[test[1]];
+      if (holds) return forVersion(value[key], minecraft);
+    }
+    return forVersion(value.else, minecraft);
+  }
+  const out = {};
+  for (const key of keys) out[key] = forVersion(value[key], minecraft);
+  return out;
+}
+
 function resolve(reference, saved) {
   const trimmed = reference.trim();
   return trimmed[0] === "=" ? evaluate(trimmed.slice(1), saved) : lookup(trimmed, saved);
@@ -467,6 +509,20 @@ function problemLines(text) {
  */
 async function run(puppet, scenario, options = {}) {
   const saved = {};
+  // Asked once, of whichever side answers: both sides of one game are one version.
+  let minecraft = options.minecraft;
+  if (!minecraft) {
+    for (const side of ["client", "server"]) {
+      try {
+        minecraft = (await puppet.call(side, "info")).minecraft;
+        if (minecraft) break;
+      } catch (absent) {
+        // Not that side, then.
+      }
+    }
+  }
+  const chosen = (steps) => (steps || []).map((step) => forVersion(step, minecraft));
+  scenario = { ...scenario, setup: chosen(scenario.setup), steps: chosen(scenario.steps), teardown: chosen(scenario.teardown) };
   const report = [];
   let failed = 0;
   let number = 0;
@@ -517,4 +573,4 @@ async function run(puppet, scenario, options = {}) {
   };
 }
 
-module.exports = { parsePath, valueAt, substitute, evaluate, check, run, LogWatch, problemLines, compareGolden };
+module.exports = { parsePath, valueAt, substitute, evaluate, check, run, LogWatch, problemLines, compareGolden, forVersion, compareVersions };

@@ -17,7 +17,6 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.tooltip.TooltipPositioner;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipData;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -86,12 +85,15 @@ public abstract class DrawContextMixin {
         }
     }
 
+    // TooltipData moved packages between versions; the handler only needs its Optional, which erases to
+    // the same descriptor in both, so it is left unnamed and this mixin is shared.
+    //
     // A tooltip's lines are drawn by its components, past drawText, so they are
     // taken where they are handed over.
 
     @Inject(method = "drawTooltip(Lnet/minecraft/client/font/TextRenderer;Ljava/util/List;Ljava/util/Optional;II)V",
             at = @At("HEAD"), require = 0)
-    private void mc_puppet$tooltip(TextRenderer renderer, List<Text> lines, Optional<TooltipData> data, int x,
+    private void mc_puppet$tooltip(TextRenderer renderer, List<Text> lines, Optional<?> data, int x,
                                    int y, CallbackInfo info) {
         if (FrameCapture.active()) {
             List<String> said = new ArrayList<>();

@@ -84,7 +84,7 @@ public final class PuppetClient {
                 // meets a screen nobody opened. Not written to options.txt.
                 client.options.pauseOnLostFocus = false;
                 // A sound is often all a mod does to say that something worked.
-                client.getSoundManager().registerListener((sound, set, range) -> {
+                com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.onSound(client, sound -> {
                     JsonObject more = new JsonObject();
                     more.addProperty("category", sound.getCategory().getName());
                     more.addProperty("x", Math.round(sound.getX() * 10) / 10.0);

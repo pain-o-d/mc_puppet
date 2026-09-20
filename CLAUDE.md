@@ -55,6 +55,15 @@ else it is off until told otherwise. Never change that default.
 - **Raise `Protocol.VERSION` when an existing operation changes what it takes
   or answers**, not when one is added, and add the number to `PROTOCOLS` in
   `tools/puppet/lib.js` for as long as the tools still speak it.
+- **Two Minecraft versions, one set of sources** (`docs/MULTIVERSION.md`). The
+  root builds 1.21.1; `mc1.20.1/` is a build of its own that compiles the same
+  `common/src`, leaving out every package called `compat` and bringing its
+  own. A difference between versions goes in `compat/`, in **both** files,
+  with the same name and meaning, or the other build stops. Shared code never
+  asks which version it is on. After touching shared code, run
+  `tools/build-all.sh`, and before believing it, both scenarios on all four:
+  `node tools/puppet/puppet.js --dir mc1.20.1 launch client --project mc1.20.1 --loader forge`.
+  Each of the four has shown something the others did not.
 - **Security is the product's licence to exist.** Loopback only, off by
   default, token per start, wrong token ends the connection. There is no
   setting for the bind address and there must never be one. Any change near

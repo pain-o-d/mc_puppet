@@ -31,8 +31,6 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.registry.Registries;
 import net.minecraft.scoreboard.Scoreboard;
-import net.minecraft.scoreboard.ScoreboardDisplaySlot;
-import net.minecraft.scoreboard.ScoreboardEntry;
 import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
@@ -241,21 +239,19 @@ final class Sight {
         json.add("boss_bars", bars);
 
         Scoreboard scoreboard = player.getScoreboard();
-        ScoreboardObjective sidebar = scoreboard.getObjectiveForSlot(ScoreboardDisplaySlot.SIDEBAR);
+        ScoreboardObjective sidebar = com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.sidebarOf(scoreboard);
         if (sidebar == null) {
             json.add("sidebar", JsonNull.INSTANCE);
         } else {
             JsonObject board = new JsonObject();
             board.addProperty("title", sidebar.getDisplayName().getString());
             JsonArray lines = new JsonArray();
-            scoreboard.getScoreboardEntries(sidebar).stream().filter(entry -> !entry.hidden())
-                    .sorted((a, b) -> Integer.compare(b.value(), a.value())).limit(15)
-                    .forEach((ScoreboardEntry entry) -> {
-                        JsonObject line = new JsonObject();
-                        line.addProperty("name", entry.name().getString());
-                        line.addProperty("value", entry.value());
-                        lines.add(line);
-                    });
+            com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.linesOf(scoreboard, sidebar).forEach(entry -> {
+                JsonObject line = new JsonObject();
+                line.addProperty("name", entry.getKey());
+                line.addProperty("value", entry.getValue());
+                lines.add(line);
+            });
             board.add("lines", lines);
             json.add("sidebar", board);
         }
@@ -263,8 +259,7 @@ final class Sight {
         JsonArray effects = new JsonArray();
         for (StatusEffectInstance effect : player.getStatusEffects()) {
             JsonObject one = new JsonObject();
-            one.addProperty("id", effect.getEffectType().getKey().map(key -> key.getValue().toString())
-                    .orElse("unregistered"));
+            one.addProperty("id", com.modrinth.pain_o_d.mc_puppet.compat.Compat.idOf(effect));
             one.addProperty("level", effect.getAmplifier() + 1);
             one.addProperty("ticks", effect.getDuration());
             effects.add(one);
@@ -404,7 +399,7 @@ final class Sight {
             json.addProperty("chunks_drawn", client.worldRenderer.getCompletedChunkCount());
         }
         if (client.getServer() != null) {
-            json.addProperty("server_ms_per_tick", Layout.round(client.getServer().getAverageTickTime()));
+            json.addProperty("server_ms_per_tick", Layout.round(com.modrinth.pain_o_d.mc_puppet.compat.Compat.msPerTick(client.getServer())));
         }
         return json;
     }

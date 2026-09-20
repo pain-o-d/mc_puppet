@@ -121,13 +121,31 @@ public final class Bridge implements AutoCloseable {
         }
     }
 
+    /**
+     * 127.0.0.1, said in so many bytes. {@code InetAddress.getLoopbackAddress()} is whichever
+     * loopback the JVM prefers, and under Forge, which starts the game preferring IPv6, that is
+     * {@code ::1}: the bridge listened where nobody was calling, while the endpoint file and the
+     * log both said 127.0.0.1. Found the first time the mod ran on Forge. Still loopback, and
+     * now the one the file names.
+     */
+    private static final InetAddress LOOPBACK = ipv4Loopback();
+
+    private static InetAddress ipv4Loopback() {
+        try {
+            return InetAddress.getByAddress("localhost", new byte[] {127, 0, 0, 1});
+        } catch (java.net.UnknownHostException impossible) {
+            // Four bytes are always an address.
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     private static ServerSocket bind(int port) throws IOException {
         IOException last = null;
         for (int attempt = 0; attempt < 20; attempt++) {
             ServerSocket candidate = new ServerSocket();
             try {
                 candidate.setReuseAddress(false);
-                candidate.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), port + attempt), 16);
+                candidate.bind(new InetSocketAddress(LOOPBACK, port + attempt), 16);
                 return candidate;
             } catch (IOException taken) {
                 candidate.close();
