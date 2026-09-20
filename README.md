@@ -70,16 +70,20 @@ a project; test infrastructure should not change by itself.
 1. Put the jar (and Architectury API) in `mods/`, or depend on it in your dev
    environment (below).
 2. Start the game with `-Dmc_puppet.enabled=true`.
-3. Talk to it:
+3. Talk to it. The tools are on npm as `mc-puppet`, with no dependencies
+   (Node 18 or later):
 
 ```bash
-node tools/puppet/puppet.js --dir <gameDir> status
-node tools/puppet/puppet.js --dir <gameDir> client help
-node tools/puppet/puppet.js --dir <gameDir> client screen
-node tools/puppet/puppet.js --dir <gameDir> client click_widget text=Singleplayer
-node tools/puppet/puppet.js --dir <gameDir> server command '{"command":"time set day"}'
-node tools/puppet/puppet.js --dir <gameDir> run scenarios/trade-with-a-villager.json
+npx mc-puppet --dir <gameDir> status
+npx mc-puppet --dir <gameDir> client help
+npx mc-puppet --dir <gameDir> client screen
+npx mc-puppet --dir <gameDir> client click_widget text=Singleplayer
+npx mc-puppet --dir <gameDir> server command '{"command":"time set day"}'
+npx mc-puppet --dir <gameDir> run scenarios/trade-with-a-villager.json
 ```
+
+From a checkout of this repository the same command is
+`node tools/puppet/puppet.js`, which is how the rest of this page writes it.
 
 `--dir` is a game directory or a mod project root: `run`, `fabric/run` and
 `neoforge/run` under it are looked in too. Without it, `MC_PUPPET_DIRS`
@@ -322,17 +326,19 @@ dependency in the metadata, the check above). Register at any time.
 
 ## For AI coding agents (MCP)
 
-`tools/puppet/mcp.js` is a dependency-free [MCP](https://modelcontextprotocol.io)
+`mc-puppet mcp` is a dependency-free [MCP](https://modelcontextprotocol.io)
 server. Register it with your agent's host and point it at your project:
 
 ```json
 "mc-puppet": {
   "type": "stdio",
-  "command": "node",
-  "args": ["/path/to/mc_puppet/tools/puppet/mcp.js"],
+  "command": "npx",
+  "args": ["-y", "mc-puppet", "mcp"],
   "env": { "MC_PUPPET_DIRS": "/path/to/your_mod" }
 }
 ```
+
+(From a checkout: `"command": "node", "args": ["/path/to/mc_puppet/tools/puppet/mcp.js"]`.)
 
 Five tools, deliberately: `puppet_status`, `puppet_help`, `puppet_call`,
 `puppet_run` (a whole scenario in one call, reporting only what failed or was

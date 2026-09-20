@@ -6,9 +6,11 @@
  * Register it with the agent's host, pointing it at the project whose game
  * directories it should look in:
  *
- *   "mc-puppet": { "type": "stdio", "command": "node",
- *                  "args": ["<path>/tools/puppet/mcp.js"],
+ *   "mc-puppet": { "type": "stdio", "command": "npx",
+ *                  "args": ["-y", "mc-puppet", "mcp"],
  *                  "env": { "MC_PUPPET_DIRS": "E:/MineMods/my_mod" } }
+ *
+ * or, from a checkout, "command": "node", "args": ["<path>/tools/puppet/mcp.js"].
  *
  * Five tools, on purpose. Every tool's description is paid for in every
  * conversation, and the game already knows its own operations: puppet_help
@@ -193,7 +195,7 @@ async function handle(line) {
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "mc-puppet", version: "0.1.0" },
+          serverInfo: { name: "mc-puppet", version: require("./package.json").version },
         },
       });
     } else if (request.method === "tools/list") {
