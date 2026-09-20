@@ -97,11 +97,10 @@ are optional, and the build says "Cannot remap drawGuiTexture" and goes on.
 
 ## What only running it found
 
-- **A 1.20.1 dedicated dev server never exits.** Found by a mod that uses
-  this one, on the first day it ran a 1.20.1 server: after `stop` the worlds
-  are saved, the ports closed, and the JVM stays, kept by Architectury
-  Transformer's thread pools, which are not daemons. On 1.21.1 the game ends
-  the process itself. What was left held the remapped mod jars, and the next
+- **A dedicated dev server never exits.** Found by a mod that uses this one,
+  on the first day it ran a 1.20.1 server, and then seen on every target:
+  after `stop` the worlds are saved, the ports closed, and the JVM stays,
+  kept by Architectury Transformer's thread pools, which are not daemons. What was left held the remapped mod jars, and the next
   launch failed with *Failed to remap mods*. `core/Leaving` gives a stopped
   dedicated server's process ten seconds and then ends it, in a development
   environment only. Seen: gone 14 seconds after `stop`, Gradle exiting 0.
