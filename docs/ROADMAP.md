@@ -111,8 +111,22 @@ after it rests on it.
 - [x] The token's file is its owner's alone where that can be said.
 - [ ] A review of `Bridge`, `Consent` and `Audit` by somebody other than
       their author (`/code-review`).
-- [ ] The tools on npm (`npx mc-puppet`, and as an MCP server); the mod on
-      Modrinth, which is also its Maven.
+- [x] **The built jar in a real server**, outside any development environment
+      (`node tools/prod-check.js --eula`): with a config that says on and no
+      consent it stays off and says what to run; allowed, it opens on
+      127.0.0.1 with a token; disallowed, off again; the process ending by
+      itself each time. Fourteen checks. NeoForge 1.21.1 only so far: the
+      other three jars, and a real *client*, are not tried.
+- [x] The tools are an npm package, `mc-puppet`, with `mc-puppet mcp` for the
+      MCP server: packed, installed into an empty directory, run through npx.
+      Not published: that is the owner's to do.
+- [x] The README says four targets, and how a Forge or NeoForge dev run takes
+      the mod (`modLocalRuntime`, not `run/mods`). The licence is in every
+      jar; there is an icon and a changelog; the 1.21.1 jars say `+mc1.21.1`.
+- [ ] A repository the metadata's links can point at. They name
+      `github.com/pain-o-d/mc_puppet`, which does not exist yet.
+- [ ] Published: the package on npm, the mod on Modrinth, which is also its
+      Maven.
 - [ ] An exit of its own for a client started with `pretend_production`.
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
