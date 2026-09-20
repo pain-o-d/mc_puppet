@@ -98,6 +98,23 @@ after it rests on it.
 - [x] **An audit trail**: every operation logged at debug, so what an agent
       did can be read back.
 
+## Before it is published
+
+- [x] **A shipped config opens nothing.** Outside a development environment
+      the bridge needs consent from the user's home directory, per game
+      directory (`Consent`, `mc-puppet allow`). Seen in a running game:
+      refused with the reason and the command in the log; opened once
+      allowed; the player told in chat on joining; refused again once
+      disallowed.
+- [x] **The protocol has a version**, in the endpoint file and in `info`, and
+      the tools name which side to update when they differ.
+- [x] The token's file is its owner's alone where that can be said.
+- [ ] A review of `Bridge`, `Consent` and `Audit` by somebody other than
+      their author (`/code-review`).
+- [ ] The tools on npm (`npx mc-puppet`, and as an MCP server); the mod on
+      Modrinth, which is also its Maven.
+- [ ] An exit of its own for a client started with `pretend_production`.
+
 ## What the phases taught
 
 - Run both loaders. Each phase had something only NeoForge showed.

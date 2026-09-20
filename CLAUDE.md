@@ -45,6 +45,16 @@ else it is off until told otherwise. Never change that default.
 
 ## Rules that are not obvious
 
+- **Consent lives in the user's home directory, never in the game directory.**
+  `Consent` is what makes a shipped config harmless. Do not add a second key
+  to `config/mc_puppet.json`, an environment variable a launcher profile can
+  carry, or a wildcard: each would be shipped or set by exactly the people it
+  is there to stop. `-Dmc_puppet.pretend_production=true` tries the rules for
+  everybody else from a dev run, and can only make things stricter. A client
+  started that way has no bridge and must be closed by hand.
+- **Raise `Protocol.VERSION` when an existing operation changes what it takes
+  or answers**, not when one is added, and add the number to `PROTOCOLS` in
+  `tools/puppet/lib.js` for as long as the tools still speak it.
 - **Security is the product's licence to exist.** Loopback only, off by
   default, token per start, wrong token ends the connection. There is no
   setting for the bind address and there must never be one. Any change near

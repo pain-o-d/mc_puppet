@@ -392,3 +392,33 @@ test("what let works out can be expected of, and a failure shows the sums", asyn
   assert.match(report.steps[2].problems[0], /"lost" is -1, expected gte 0/);
   assert.deepEqual(report.steps[2].shown, { lost: -1 });
 });
+
+test("a mod and tools of different ages say so, in words that name which to update", () => {
+  const { mismatch, PROTOCOLS } = require("./lib");
+  assert.equal(mismatch({ protocol: PROTOCOLS[0] }), null);
+  assert.match(mismatch({}), /older than these tools.*update the mod/);
+  assert.match(mismatch({ protocol: 99 }), /speaks protocol 99.*update the tools/);
+  assert.match(mismatch({ protocol: 0 }), /no longer do.*update the mod/);
+});
+
+test("consent is one directory at a time, kept in the home directory, and can be taken back", () => {
+  const fsReal = require("fs");
+  const os = require("os");
+  const pathOf = require("path");
+  const { setAllowed, readAllowed, consentFile } = require("./lib");
+  const home = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-home-"));
+  try {
+    assert.deepEqual(readAllowed(home), []);
+    setAllowed("C:/games/one", true, home);
+    setAllowed("C:/games/two", true, home);
+    setAllowed("c:/GAMES/one/", true, home);
+    assert.equal(readAllowed(home).length, 2, "the same directory written another way is the same directory");
+    assert.ok(fsReal.readFileSync(consentFile(home), "utf8").includes("Nothing you download should ever write here"));
+    setAllowed("C:/games/one", false, home);
+    assert.deepEqual(readAllowed(home).map((each) => pathOf.basename(each)), ["two"]);
+    fsReal.writeFileSync(consentFile(home), "not json");
+    assert.deepEqual(readAllowed(home), [], "an unreadable file allows nothing");
+  } finally {
+    fsReal.rmSync(home, { recursive: true, force: true });
+  }
+});

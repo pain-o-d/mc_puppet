@@ -40,8 +40,27 @@ public final class McPuppet {
     private McPuppet() {
     }
 
+    /**
+     * Whether this is a mod developer's run. {@code -Dmc_puppet.pretend_production=true} says it
+     * is not, which is how the rules for everybody else are tried out from a development
+     * environment. It can only make things stricter; nothing says the opposite.
+     */
+    public static boolean development() {
+        return Platform.isDevelopmentEnvironment() && !Boolean.getBoolean("mc_puppet.pretend_production");
+    }
+
     public static void init() {
-        PuppetConfig config = PuppetConfig.load(Platform.getConfigFolder());
+        PuppetConfig config = PuppetConfig.load(Platform.getConfigFolder(), development(),
+                Platform.getGameFolder(), com.curseforge.pain_o_d.mc_puppet.core.Consent.home());
+        if (config.refusedForWantOfConsent()) {
+            // Said loudly, because the usual way to get here is a modpack that shipped its
+            // author's config, and the player it reached should be able to find out.
+            LOGGER.warn("MC Puppet was switched on by a config file or a launch option, and has stayed OFF: "
+                    + "this is not a development environment, and nobody at this machine has allowed this game "
+                    + "to be driven. If you are testing a mod here, run: mc-puppet allow \"{}\". If you are "
+                    + "not, nothing needs doing; you may remove the mod.", Platform.getGameFolder());
+            return;
+        }
         if (!config.enabled()) {
             LOGGER.info("MC Puppet is installed and off. Switch it on in config/mc_puppet.json "
                     + "or with -Dmc_puppet.enabled=true.");

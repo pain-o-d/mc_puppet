@@ -32,6 +32,16 @@ public final class Protocol {
     }
 
     /** No pretty printing: a response has to stay on its line. */
+    /**
+     * The version of what is said over the socket. The mod and the tools that
+     * talk to it are installed separately and will not always be of an age;
+     * each says which version it speaks, so that a mismatch is reported as
+     * one, and not as an operation that mysteriously is not there. Raised
+     * when an existing operation changes what it takes or answers, not when
+     * one is added: {@code help} is how a tool learns what there is.
+     */
+    public static final int VERSION = 1;
+
     public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
 
     /** Longest request line read. A batch of a few hundred steps fits with room to spare. */

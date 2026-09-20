@@ -102,6 +102,9 @@ public final class ServerOps {
     private static JsonElement info(MinecraftServer server) {
         JsonObject info = new JsonObject();
         info.addProperty("side", "server");
+        info.addProperty("protocol", com.curseforge.pain_o_d.mc_puppet.core.Protocol.VERSION);
+        info.addProperty("mod_version", dev.architectury.platform.Platform.getMod("mc_puppet").getVersion());
+        info.addProperty("development", com.curseforge.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", server.getVersion());
         info.addProperty("dedicated", server.isDedicated());
         // The save's folder, which is what open_world takes: a scenario that leaves a world can come back to it.
