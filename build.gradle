@@ -20,6 +20,17 @@ subprojects {
     apply plugin: 'architectury-plugin'
     apply plugin: 'maven-publish'
 
+    // MIT asks that its text goes wherever a copy does, and a jar is a copy. Under the
+    // mod's name, since a mods folder is full of files called LICENSE. Not from common,
+    // whose resources are folded into each loader's jar and would bring a second one.
+    if (project.name != 'common') {
+        processResources {
+            from(rootProject.file('LICENSE')) {
+                rename { 'LICENSE_mc_puppet' }
+            }
+        }
+    }
+
     base {
         // Set up a suffixed format for the mod jar names, e.g. `example-fabric`.
         archivesName = "$rootProject.archives_name-$project.name"
