@@ -3,6 +3,9 @@
 Lets a program on the same machine see and drive a running game, for testing
 mods. Read `README.md` first: it is the user-facing truth, including the
 safety model, and must stay true.
+Then `docs/HANDOVER.md`: what is on `develop` and unreleased, what was seen
+running and what was not, and what waits for the owner. Keep it current in the
+same commit as the change it describes.
 
 Multi-loader mod built on **Architectury** for **Minecraft 1.21.1**, shipping
 to **Fabric** and **NeoForge** from one shared codebase. Same toolchain, same
