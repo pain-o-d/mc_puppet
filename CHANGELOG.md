@@ -3,8 +3,20 @@
 Versions are `<mod version>+mc<Minecraft version>`: the same mod version is
 the same features and the same protocol on every game it is built for.
 
-## Unreleased
+## 0.1.2
 
+2026-09-21. A beta.
+
+- **A client's bridge reaches this machine, and no further.** In a world of
+  one's own, or on a server on `localhost`, nothing changes. On a server that
+  is anywhere else the bridge neither drives nor reads the game: clicks, keys,
+  walking, attacking, commands, the screen, nearby entities and screenshots
+  are all refused, by name and through a `batch` or a `wait_until` alike, and
+  whatever a test was holding is let go of on the way in. `info`, `help`,
+  `stop`, `release_keys`, `leave_world` and `quit` still answer, and `info`
+  says `"elsewhere": true`. A tool that presses a player's keys is a bot on
+  somebody else's server, and nothing about testing a mod needs one. 0.1.1
+  made no such distinction; nobody had asked it to yet.
 - Every place the project is found says where the rest of it is: the README
   links to Modrinth and npm, the npm page to the mod and the manual, and the
   mod menu in the game to the mod's page, its source and its issues.

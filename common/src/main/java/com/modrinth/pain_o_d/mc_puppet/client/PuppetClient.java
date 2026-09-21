@@ -74,6 +74,19 @@ public final class PuppetClient {
         });
         Recorder.init();
 
+        // A test that was holding a key when the player went to somebody else's server lets go of it
+        // there: the bridge refuses new input on such a server, and must not go on giving old input.
+        ClientTickEvent.CLIENT_POST.register(client -> {
+            boolean now = elsewhere(client);
+            if (now && !wasElsewhere) {
+                net.minecraft.client.option.KeyBinding.unpressAll();
+                VirtualKeys.releaseAll();
+                LOGGER.warn("MC Puppet: this client has joined a server that is not on this machine. The bridge "
+                        + "neither drives nor reads the game there; it answers again in a world of your own.");
+            }
+            wasElsewhere = now;
+        });
+
         ClientTickEvent.CLIENT_POST.register(client -> {
             if (bridge != null || gaveUp || client.getOverlay() != null) {
                 return;
@@ -93,6 +106,8 @@ public final class PuppetClient {
                     EventLog.CLIENT.add("sound", sound.getId().toString(), more);
                 });
                 Ops ops = ClientOps.create(client, waiter, chat);
+                // This machine and no further: on somebody else's server a bridge is a bot. See Reach.
+                ops.gate(op -> elsewhere(client) ? com.modrinth.pain_o_d.mc_puppet.core.Reach.refusalElsewhere(op) : null);
                 PuppetApi.attach(PuppetApi.Side.CLIENT, ops);
                 bridge = Bridge.open("client", ops, config.clientPort(), Platform.getGameFolder());
             } catch (IOException | RuntimeException failure) {
@@ -108,5 +123,17 @@ public final class PuppetClient {
                 open.close();
             }
         });
+    }
+
+    private static volatile boolean wasElsewhere;
+
+    /** Whether the world this client is in is served from another machine. No world is nowhere else. */
+    static boolean elsewhere(net.minecraft.client.MinecraftClient client) {
+        net.minecraft.client.network.ClientPlayNetworkHandler handler = client.getNetworkHandler();
+        if (client.world == null || handler == null) {
+            return false;
+        }
+        net.minecraft.network.ClientConnection connection = handler.getConnection();
+        return !com.modrinth.pain_o_d.mc_puppet.core.Reach.isThisMachine(connection.isLocal(), connection.getAddress());
     }
 }

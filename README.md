@@ -80,6 +80,13 @@ This is remote control of a game, and it is built to be refused.
   needs no bridge. What is kept out is *files* arriving with a download.
 - **When it is on outside development, the player is told** in chat on joining
   a world, every time. A log is not somewhere a player looks.
+- **This machine, and no further.** A client's bridge works in a world of
+  your own and on a server on `localhost`. On any other server it neither
+  drives nor reads the game — no clicks, no keys, no walking, no screen, no
+  list of who is nearby — and lets go of anything a test was holding on the
+  way in. A tool that presses a player's keys is a bot on somebody else's
+  server, and nothing about testing a mod needs one. `info` says
+  `"elsewhere": true` there, and leaving still works.
 - **Everything asked is written down**, in `mc_puppet/audit-<side>.log`:
   each request, each step inside a `batch`, what a `wait_until` polls. The
   one written about supplies the words, so a name cannot break a line and
@@ -141,7 +148,7 @@ instead, and Loom remaps it:
 ```groovy
 dependencies {
     // In a dev run only: never in your jar, never in your published dependencies.
-    modLocalRuntime "maven.modrinth:mc-puppet:0.1.1+mc1.20.1-forge"   // or +mc1.21.1-neoforge
+    modLocalRuntime "maven.modrinth:mc-puppet:0.1.2+mc1.20.1-forge"   // or +mc1.21.1-neoforge
 }
 ```
 
