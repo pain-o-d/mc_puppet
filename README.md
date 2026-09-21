@@ -24,7 +24,7 @@ by somebody looking at it. MC Puppet makes the client answer questions.
   or an AI coding agent through the bundled **MCP server**. A 24-step trading
   test runs in under two seconds.
 
-Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) · needs [Architectury API](https://modrinth.com/mod/architectury-api) · MIT
+Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge), those two versions exactly · needs [Architectury API](https://modrinth.com/mod/architectury-api), and on Fabric [Fabric API](https://modrinth.com/mod/fabric-api) · MIT
 
 > **Beta.** Used so far by one mod's test suite, its author's. Seen working: the
 > scenarios on all four targets in development environments, and the built jar
