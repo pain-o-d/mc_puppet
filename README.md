@@ -26,6 +26,13 @@ by somebody looking at it. MC Puppet makes the client answer questions.
 
 Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) · needs [Architectury API](https://modrinth.com/mod/architectury-api) · MIT
 
+> **Beta.** Used so far by one mod's test suite, its author's. Seen working: the
+> scenarios on all four targets in development environments, and the built jar
+> in a real NeoForge 1.21.1 server. **Not yet tried**: the other three jars
+> outside a development environment, and a real client from an ordinary
+> launcher. The protocol and the scenario language may still change before
+> 1.0.0, so pin an exact version of the mod and of the tools in your project.
+
 ## Safety first
 
 This is remote control of a game, and it is built to be refused.

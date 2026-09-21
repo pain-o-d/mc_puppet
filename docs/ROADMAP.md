@@ -157,6 +157,19 @@ after it rests on it.
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
 
+## What 1.0.0 waits for
+
+Every release before it is a beta, marked so on Modrinth and on GitHub; the
+version number says as much by starting with a nought. It stops being one when:
+
+- [ ] all four jars have run in real installs, outside any development
+      environment, a client from an ordinary launcher among them, with the
+      consent story seen on each (`tools/prod-check.js` does NeoForge 1.21.1's
+      server and nothing else yet);
+- [ ] a project other than its author's uses it;
+- [ ] the protocol has gone several releases without a change that breaks a
+      scenario.
+
 ## What the phases taught
 
 - Run both loaders. Each phase had something only NeoForge showed.

@@ -5,7 +5,8 @@ the same features and the same protocol on every game it is built for.
 
 ## 0.1.0
 
-The first release. Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric,
+2026-09-21. The first release, **a beta**: what has and has not been tried is
+at the top of the README. Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric,
 Forge), from one set of sources. Needs Architectury API.
 
 **What it does**
