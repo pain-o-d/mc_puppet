@@ -14,7 +14,7 @@
                       Wiki     https://github.com/pain-o-d/mc_puppet#readme          (the manual is the README)
     And back          GitHub's "About" box: Website = https://modrinth.com/mod/mc-puppet; topics minecraft, minecraft-mod,
                       fabric, neoforge, forge, testing, mcp, modding. npm's page takes its links from package.json.
-    Version numbers   0.1.1+mc1.20.1-fabric, 0.1.1+mc1.20.1-forge, 0.1.1+mc1.21.1-fabric, 0.1.1+mc1.21.1-neoforge:
+    Version numbers   0.1.2+mc1.20.1-fabric, 0.1.2+mc1.20.1-forge, 0.1.2+mc1.21.1-fabric, 0.1.2+mc1.21.1-neoforge:
                       the loader is part of the number, since Modrinth's Maven finds a file by it and two
                       files under one number is one of them at random. Subtitle: "MC Puppet 0.1.1 — Forge 1.20.1".
                       Each takes its own -sources.jar as a supplementary file of type Sources JAR.
@@ -54,7 +54,7 @@ Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) — those
 **Fabric:** put the jar in `run/mods/`. **Forge and NeoForge:** make it a dependency, so that Loom remaps it — a jar in `run/mods/` is not in the names a dev run uses:
 
 ```groovy
-modLocalRuntime "maven.modrinth:mc-puppet:0.1.1+mc1.20.1-forge"   // or +mc1.21.1-neoforge
+modLocalRuntime "maven.modrinth:mc-puppet:0.1.2+mc1.20.1-forge"   // or +mc1.21.1-neoforge
 ```
 
 Then switch it on with `-Dmc_puppet.enabled=true` or `{"enabled": true}` in `run/config/mc_puppet.json`, and ask it what it can do: `npx mc-puppet client help`. The [manual](https://github.com/pain-o-d/mc_puppet#readme) has the operations, the scenario language and worked examples.
@@ -67,6 +67,7 @@ This is remote control of a game, and it is built to be refused.
 - **Localhost only.** It listens on 127.0.0.1, and there is no setting that makes it listen to a network.
 - **A token every start.** 256 bits, made afresh, in a file in the game's own folder. Reaching the port is not enough; a page in your browser gets no further than that.
 - **A modpack cannot switch it on for you.** A pack ships its `config/` folder, so outside a development environment the switch is not enough: you have to allow that game directory yourself, from your home directory, with `npx mc-puppet allow <gameDir>`. One directory at a time, no wildcard. Until then the mod says in the log that it was switched on and has stayed off.
+- **It does not work on other people's servers.** A client's bridge drives a world of your own or a server on `localhost`. Anywhere else it refuses to click, press, walk, fight or read the game at all: a tool that presses a player's keys is a bot on somebody else's server, and testing a mod never needs one.
 - **When it is on in a real game, you are told** in chat, every time you join a world.
 - **Everything asked of it is written down** in an audit log beside the token.
 

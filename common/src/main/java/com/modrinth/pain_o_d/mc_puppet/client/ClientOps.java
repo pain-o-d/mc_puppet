@@ -369,6 +369,8 @@ public final class ClientOps {
         info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : com.modrinth.pain_o_d.mc_puppet.compat.Compat.OTHER_LOADER);
         info.addProperty("in_world", client.world != null && client.player != null);
         info.addProperty("singleplayer", client.isInSingleplayer());
+        // True on a server that is not on this machine, where nearly everything is refused: see core/Reach.
+        info.addProperty("elsewhere", PuppetClient.elsewhere(client));
         info.addProperty("screen", client.currentScreen == null ? null : client.currentScreen.getClass().getName());
         info.add("window", windowJson(client));
         JsonArray mods = new JsonArray();

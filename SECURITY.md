@@ -26,6 +26,8 @@ Anything that breaks one of these, which the mod claims:
 - outside a development environment, a game is not driven until its directory
   has been allowed from the user's home, and nothing that arrives with a
   download — a config folder, a modpack, a world — can give that consent;
+- a client's bridge neither drives nor reads the game on a server that is not
+  on this machine;
 - the audit log says what was asked, and whoever is written about cannot make
   it say otherwise;
 - a scenario file cannot reach the machine it is run on: no code of its

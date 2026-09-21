@@ -1,6 +1,6 @@
 {
   "name": "mc-puppet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "See and drive a running Minecraft from a script, CI or an AI coding agent: the command line tools and MCP server for the MC Puppet mod.",
   "license": "MIT",
   "author": "pain_o_d",

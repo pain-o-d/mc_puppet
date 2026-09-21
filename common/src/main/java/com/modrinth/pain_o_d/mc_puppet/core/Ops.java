@@ -64,6 +64,22 @@ public final class Ops {
 
     private volatile Inner inner = (within, op, args, failure, millis) -> { };
 
+    /** Asked before anything runs, by name: why not, or {@code null}. */
+    public interface Gate {
+        String refuses(String op);
+    }
+
+    private volatile Gate gate = op -> null;
+
+    /**
+     * Something that may refuse an operation for where the game is and not for what was asked:
+     * a client on somebody else's server, see {@link Reach}. It is asked for every operation,
+     * a batch's steps and what a wait_until polls among them, and asked again each time.
+     */
+    public void gate(Gate gate) {
+        this.gate = gate;
+    }
+
     /** For the audit: a batch's steps and what a wait_until polls, each as it is run. */
     public void tellOfInner(Inner listener) {
         this.inner = listener;
@@ -125,6 +141,10 @@ public final class Ops {
             return CompletableFuture.failedFuture(
                     new Refused("no such operation on the " + side + ": " + name + " (try \"help\")"));
         }
+        String refused = gate.refuses(name);
+        if (refused != null) {
+            return CompletableFuture.failedFuture(new Refused(refused));
+        }
         CompletableFuture<JsonElement> answer = new CompletableFuture<>();
         try {
             gameThread.execute(() -> {
@@ -161,6 +181,10 @@ public final class Ops {
         }
         JsonObject opArgs = args.has("args") && args.get("args").isJsonObject()
                 ? args.getAsJsonObject("args") : new JsonObject();
+        String refused = gate.refuses(name);
+        if (refused != null) {
+            throw new Refused(refused);
+        }
         // Once, not once a tick: what is polled is the same every time.
         inner.ran("wait_until", name, opArgs, null, 0);
         String path = Args.string(args, "path", "");
@@ -169,6 +193,12 @@ public final class Ops {
                 Args.timeout(args), () -> {
                     JsonElement answer;
                     try {
+                        // The game may have gone somewhere else since the waiting began.
+                        String nowRefused = gate.refuses(name);
+                        if (nowRefused != null) {
+                            lastProblem[0] = nowRefused;
+                            return null;
+                        }
                         CompletableFuture<JsonElement> asked = entry.op().run(opArgs);
                         if (!asked.isDone()) {
                             lastProblem[0] = name + " does not answer at once";

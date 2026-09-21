@@ -157,6 +157,13 @@ after it rests on it.
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
 
+## Later, perhaps
+
+- A server that has MC Puppet on could say so to a client that has it too, and
+  the client's bridge could then work there: a test server on another machine,
+  with its owner's word for it. Until something needs that, "this machine and
+  no further" is the whole rule, and it needs no packets.
+
 ## What 1.0.0 waits for
 
 Every release before it is a beta, marked so on Modrinth and on GitHub; the
