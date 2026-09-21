@@ -11,10 +11,11 @@
     "sources": "https://github.com/pain-o-d/mc_puppet"
   },
   "license": "MIT",
+  "icon": "assets/mc_puppet/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.curseforge.pain_o_d.mc_puppet.fabric.McPuppetFabric"
+      "com.modrinth.pain_o_d.mc_puppet.fabric.McPuppetFabric"
     ]
   },
   "mixins": [

@@ -22,7 +22,7 @@ whose `CLAUDE.md` explains the workaround in full
 | `tools/puppet/` | `lib.js` (discovery + connection), `scenario.js` (the scenario language), `puppet.js` (CLI), `mcp.js` (MCP server). No dependencies. |
 | `scenarios/` | Worked examples, runnable against a dev client. |
 
-Base package `com.curseforge.pain_o_d.mc_puppet`, mod id `mc_puppet`.
+Base package `com.modrinth.pain_o_d.mc_puppet`, mod id `mc_puppet`.
 
 ## Commands
 
@@ -45,6 +45,25 @@ else it is off until told otherwise. Never change that default.
 
 ## Rules that are not obvious
 
+- **Consent lives in the user's home directory, never in the game directory.**
+  `Consent` is what makes a shipped config harmless. Do not add a second key
+  to `config/mc_puppet.json`, an environment variable a launcher profile can
+  carry, or a wildcard: each would be shipped or set by exactly the people it
+  is there to stop. `-Dmc_puppet.pretend_production=true` tries the rules for
+  everybody else from a dev run, and can only make things stricter. A client
+  started that way has no bridge and must be closed by hand.
+- **Raise `Protocol.VERSION` when an existing operation changes what it takes
+  or answers**, not when one is added, and add the number to `PROTOCOLS` in
+  `tools/puppet/lib.js` for as long as the tools still speak it.
+- **Two Minecraft versions, one set of sources** (`docs/MULTIVERSION.md`). The
+  root builds 1.21.1; `mc1.20.1/` is a build of its own that compiles the same
+  `common/src`, leaving out every package called `compat` and bringing its
+  own. A difference between versions goes in `compat/`, in **both** files,
+  with the same name and meaning, or the other build stops. Shared code never
+  asks which version it is on. After touching shared code, run
+  `tools/build-all.sh`, and before believing it, both scenarios on all four:
+  `node tools/puppet/puppet.js --dir mc1.20.1 launch client --project mc1.20.1 --loader forge`.
+  Each of the four has shown something the others did not.
 - **Security is the product's licence to exist.** Loopback only, off by
   default, token per start, wrong token ends the connection. There is no
   setting for the bind address and there must never be one. Any change near

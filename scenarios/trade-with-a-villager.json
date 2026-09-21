@@ -1,53 +1,34 @@
 {
   "name": "buy apples from a farmer, and have both sides of the game agree about it",
-  "about": "Run in a creative flat world with the player called Puppet standing still. Summons its own farmer and cleans up after itself.",
+  "about": "Run in a creative flat world with the player called Puppet standing still. Summons its own farmer and cleans up after itself, whether it passed or not. Nothing here waits for a number of ticks: every wait is for the thing itself. Runs on 1.20.1 and 1.21.1: the one command that names an item with a count is written both ways.",
+  "setup": [
+    {"side":"server","op":"command","note":"a clean slate","args":{"command":"kill @e[type=minecraft:villager,distance=..8]","as":"Puppet"}},
+    {"side":"server","op":"command","args":{"command":"clear Puppet"}},
+    {"side":"server","op":"command","note":"a farmer that stays put. An item in a command is NBT before 1.20.5 and components since","args":{"as":"Puppet","command":{"mc<1.20.5":"summon minecraft:villager ~ ~ ~ {VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"},NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",Count:1b},sell:{id:\"minecraft:apple\",Count:4b},maxUses:16}]}}","else":"summon minecraft:villager ~ ~ ~ {VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"},NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:apple\",count:4},maxUses:16}]}}"}},"expect":[{"path":"success","equals":true}]},
+    {"side":"server","op":"command","args":{"command":"give Puppet minecraft:emerald 5"}},
+    {"op":"wait_until","note":"the client has heard about the emeralds","args":{"op":"count","args":{"item":"minecraft:emerald"},"equals":5,"timeout_ms":5000}}
+  ],
   "steps": [
-    { "side": "server", "op": "command", "note": "a clean slate",
-      "args": { "command": "kill @e[type=minecraft:villager,distance=..8]", "as": "Puppet" } },
-    { "side": "server", "op": "command", "args": { "command": "clear Puppet" } },
-    { "side": "server", "op": "command", "note": "a farmer that stays put",
-      "args": { "as": "Puppet",
-                "command": "summon minecraft:villager ~ ~ ~ {VillagerData:{profession:\"minecraft:farmer\",level:2,type:\"minecraft:plains\"},NoAI:1b,Offers:{Recipes:[{buy:{id:\"minecraft:emerald\",count:1},sell:{id:\"minecraft:apple\",count:4},maxUses:16}]}}" },
-      "expect": [ { "path": "success", "equals": true } ] },
-    { "side": "server", "op": "command", "args": { "command": "give Puppet minecraft:emerald 5" } },
-    { "side": "server", "op": "wait", "args": { "ticks": 10 } },
-
-    { "op": "count", "args": { "item": "minecraft:emerald" }, "note": "the client has heard about the emeralds",
-      "expect": [ { "equals": 5 } ] },
-    { "op": "use_entity", "args": { "type": "minecraft:villager" },
-      "expect": [ { "path": "profession", "equals": "minecraft:farmer" } ] },
-    { "op": "wait", "args": { "for": "screen", "value": "Merchant", "timeout_ms": 10000 } },
-
-    { "op": "screen", "save": "opened",
-      "expect": [ { "path": "title", "equals": "Farmer" },
-                  { "path": "offers#", "equals": 1 },
-                  { "path": "offers[0].sell", "equals": { "id": "minecraft:apple", "count": 4 } },
-                  { "path": "offers[0].uses", "equals": 0 },
-                  { "path": "panel.w", "equals": 276 } ] },
-
-    { "op": "select_trade", "args": { "index": 0 }, "note": "clicking the offer fills the payment slot" },
-    { "op": "wait", "args": { "for": "ticks", "value": 5 } },
-    { "op": "screen",
-      "expect": [ { "path": "slots[slot=0].stack.id", "equals": "minecraft:emerald" },
-                  { "path": "slots[slot=2].stack", "equals": { "id": "minecraft:apple", "count": 4 } } ] },
-
-    { "op": "click_slot", "args": { "slot": 2, "action": "QUICK_MOVE" }, "note": "shift-click the result: buys until the emeralds run out" },
-    { "op": "wait", "args": { "for": "ticks", "value": 10 } },
-
-    { "op": "count", "args": { "item": "minecraft:apple" }, "expect": [ { "equals": 20 } ] },
-    { "op": "screen", "expect": [ { "path": "offers[0].uses", "equals": 5 } ] },
-    { "op": "screenshot", "args": { "name": "trade-with-a-villager" }, "show": "path" },
-    { "op": "close_screen" },
-    { "op": "wait", "args": { "for": "no_screen", "timeout_ms": 5000 } },
-
-    { "side": "server", "op": "count", "args": { "player": "Puppet", "item": "minecraft:apple" },
-      "note": "and the server agrees", "expect": [ { "equals": 20 } ] },
-    { "side": "server", "op": "count", "args": { "player": "Puppet", "item": "minecraft:emerald" },
-      "expect": [ { "equals": 0 } ] },
-    { "side": "server", "op": "entities", "args": { "type": "minecraft:villager", "offers": true },
-      "expect": [ { "path": "entities[0].offers[0].uses", "equals": 5 } ] },
-
-    { "side": "server", "op": "command", "args": { "command": "kill @e[type=minecraft:villager,distance=..8]", "as": "Puppet" } },
-    { "side": "server", "op": "command", "args": { "command": "clear Puppet" } }
+    {"op":"use_entity","args":{"type":"minecraft:villager"},"expect":[{"path":"profession","equals":"minecraft:farmer"}]},
+    {"op":"wait","note":"by the container's registered type, which is the same in a shipped jar","args":{"for":"screen","value":"minecraft:merchant","timeout_ms":10000}},
+    {"op":"screen","save":"opened","expect":[{"path":"title","equals":"Farmer"},{"path":"handler_type","equals":"minecraft:merchant"},{"path":"offers#","equals":1},{"path":"offers[0].sell","equals":{"id":"minecraft:apple","count":4}},{"path":"offers[0].uses","equals":0},{"path":"panel.w","equals":276}]},
+    {"op":"select_trade","args":{"index":0},"note":"clicking the offer fills the payment slot"},
+    {"op":"wait_until","note":"the server has put the result on the counter","args":{"op":"screen","path":"slots[slot=2].stack.id","equals":"minecraft:apple","timeout_ms":5000}},
+    {"op":"screen","expect":[{"path":"slots[slot=0].stack.id","equals":"minecraft:emerald"},{"path":"slots[slot=2].stack","equals":{"id":"minecraft:apple","count":4}}]},
+    {"op":"click_at","args":{"slot":2,"modifiers":["shift"]},"note":"a shift-click with the mouse, as a player makes it: buys until the emeralds run out"},
+    {"op":"wait_until","args":{"op":"count","args":{"item":"minecraft:apple"},"equals":"${= opened.offers[0].sell.count * 5}","timeout_ms":5000}},
+    {"op":"screen","eventually":3000,"expect":[{"path":"offers[0].uses","equals":5}]},
+    {"op":"screenshot","args":{"name":"trade-with-a-villager"},"show":"path"},
+    {"op":"key","args":{"key":"escape"},"note":"the key a player closes it with"},
+    {"op":"wait","args":{"for":"no_screen","timeout_ms":5000}},
+    {"side":"server","op":"count","args":{"player":"Puppet","item":"minecraft:apple"},"note":"and the server agrees","expect":[{"equals":20}]},
+    {"side":"server","op":"count","args":{"player":"Puppet","item":"minecraft:emerald"},"expect":[{"equals":0}]},
+    {"side":"server","op":"entities","args":{"type":"minecraft:villager","offers":true},"expect":[{"path":"entities[0].offers[0].uses","equals":5}]}
+  ],
+  "teardown": [
+    {"op":"release_keys"},
+    {"op":"close_screen","optional":true},
+    {"side":"server","op":"command","args":{"command":"kill @e[type=minecraft:villager,distance=..8]","as":"Puppet"}},
+    {"side":"server","op":"command","args":{"command":"clear Puppet"}}
   ]
 }

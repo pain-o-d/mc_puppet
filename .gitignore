@@ -60,3 +60,6 @@ libs/
 
 # Node
 node_modules/
+
+# What a test run or a dev run logs, wherever it ran: *.log does not cover the rotated .log.gz.
+logs/

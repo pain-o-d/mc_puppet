@@ -10,6 +10,56 @@ const fs = require("fs");
 const net = require("net");
 const path = require("path");
 
+/**
+ * The versions of the protocol these tools speak. The mod says which it speaks in its endpoint
+ * file. The two are installed separately and will not always be of an age, and a mismatch should
+ * be reported as one, not as an operation that mysteriously is not there.
+ */
+const PROTOCOLS = [1];
+
+/** What is wrong between these tools and a game's mod, in words, or null. */
+function mismatch(endpoint) {
+  const theirs = endpoint.protocol;
+  if (theirs === undefined) {
+    return "the MC Puppet mod in that game is older than these tools and does not say which protocol it speaks; "
+      + "update the mod";
+  }
+  if (PROTOCOLS.includes(theirs)) return null;
+  return theirs > Math.max(...PROTOCOLS)
+    ? `the MC Puppet mod in that game speaks protocol ${theirs} and these tools only ${PROTOCOLS.join(", ")}; update the tools (npm i -g mc-puppet@latest)`
+    : `the MC Puppet mod in that game speaks protocol ${theirs}, which these tools no longer do (${PROTOCOLS.join(", ")}); update the mod`;
+}
+
+/** Where consent to drive a game outside a development environment is kept: see the mod's Consent. */
+function consentFile(home = require("os").homedir()) {
+  return path.join(home, ".mc_puppet", "allowed.json");
+}
+
+function readAllowed(home) {
+  try {
+    const read = JSON.parse(fs.readFileSync(consentFile(home), "utf8"));
+    return Array.isArray(read.allowed) ? read.allowed.filter((each) => typeof each === "string") : [];
+  } catch (absent) {
+    return [];
+  }
+}
+
+const sameDir = (a, b) => path.resolve(a).replace(/\\/g, "/").toLowerCase() === path.resolve(b).replace(/\\/g, "/").toLowerCase();
+
+/** Allows, or with allow false stops allowing, one game directory to be driven. Returns the list as it then is. */
+function setAllowed(gameDir, allow, home) {
+  const file = consentFile(home);
+  const kept = readAllowed(home).filter((each) => !sameDir(each, gameDir));
+  if (allow) kept.push(path.resolve(gameDir));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    _: "Game directories that programs on this machine may drive through MC Puppet, outside a development "
+      + "environment. Written by: mc-puppet allow <gameDir>. Nothing you download should ever write here.",
+    allowed: kept,
+  }, null, 2) + "\n");
+  return kept;
+}
+
 /** Where a game directory usually is, relative to a mod project's root. */
 const USUAL_DIRS = [".", "run", "fabric/run", "neoforge/run", "forge/run", "common/run"];
 
@@ -30,14 +80,17 @@ function pidAlive(pid) {
  * @param {string[]} dirs game directories, or project roots to look under;
  *   defaults to MC_PUPPET_DIRS (separated by ; or the platform's delimiter)
  *   and then to the current directory
- * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string}[]}
+ *   A directory may be given a name, "second=E:/games/two": a scenario then
+ *   says "client@second". One game directory per game: two games in one
+ *   would write the same endpoint file, and the same log.
+ * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string, game?: string}[]}
  */
 function discover(dirs) {
   const roots = (dirs && dirs.length ? dirs : (process.env.MC_PUPPET_DIRS || ".").split(/[;]/))
-    .map((dir) => dir.trim()).filter(Boolean);
+    .map((dir) => dir.trim()).filter(Boolean).map(named);
   const found = [];
   const seen = new Set();
-  for (const root of roots) {
+  for (const { game, root } of roots) {
     for (const usual of USUAL_DIRS) {
       const dir = path.resolve(root, usual);
       const folder = path.join(dir, "mc_puppet");
@@ -55,7 +108,7 @@ function discover(dirs) {
         try {
           const endpoint = JSON.parse(fs.readFileSync(file, "utf8"));
           // A game that was killed leaves its file behind. The pid says so.
-          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir });
+          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(game ? { game } : {}) });
         } catch (unreadable) {
           // Half-written as the game starts; the next look finds it whole.
         }
@@ -64,6 +117,18 @@ function discover(dirs) {
   }
   // Newest first: after a restart the live game is the one to talk to.
   return found.sort((a, b) => (b.started || 0) - (a.started || 0));
+}
+
+/** "name=path" is a named game; a Windows path's own "C:" is not a name. */
+function named(entry) {
+  const match = /^([A-Za-z_][\w-]*)=(.+)$/.exec(entry);
+  return match ? { game: match[1], root: match[2] } : { root: entry };
+}
+
+/** "client@second" is the client of the game called second; "client" is the newest client there is. */
+function parseSide(side) {
+  const at = String(side).indexOf("@");
+  return at < 0 ? { side, game: undefined } : { side: side.slice(0, at), game: side.slice(at + 1) };
 }
 
 /** One connection to one side of one game. Requests are numbered, so they may overlap. */
@@ -163,18 +228,26 @@ class Puppet {
     return discover(this.dirs);
   }
 
-  async side(side) {
-    const live = this.endpoints().find((endpoint) => endpoint.side === side);
+  async side(sideName) {
+    const { side, game } = parseSide(sideName);
+    const live = this.endpoints().find((endpoint) => endpoint.side === side
+      && (game === undefined || endpoint.game === game));
+    if (!live && game !== undefined) {
+      throw new Error(`no running game called "${game}" has its ${side} bridge on. Name a game directory with `
+        + `--dir ${game}=<gameDir> (or ${game}=<gameDir> in MC_PUPPET_DIRS)`);
+    }
     if (!live) {
       throw new Error(`no running game has its ${side} bridge on. Start the game with `
         + `-Dmc_puppet.enabled=true (or "enabled": true in config/mc_puppet.json); `
         + `looked under: ${(this.dirs && this.dirs.length ? this.dirs : [process.env.MC_PUPPET_DIRS || "."]).join(", ")}`);
     }
-    const held = this.connections.get(side);
+    const wrong = mismatch(live);
+    if (wrong) throw new Error(wrong);
+    const held = this.connections.get(sideName);
     if (held && held.endpoint.token === live.token && held.socket) return held;
     if (held) held.close();
     const fresh = new Connection(live);
-    this.connections.set(side, fresh);
+    this.connections.set(sideName, fresh);
     return fresh.connect();
   }
 
@@ -189,4 +262,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, Connection, Puppet };
+module.exports = { discover, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };

@@ -1,7 +1,7 @@
-// node --test tools/puppet
+// node --test tools/puppet/scenario.test.js
 const test = require("node:test");
 const assert = require("node:assert");
-const { valueAt, substitute, check, run, parsePath } = require("./scenario");
+const { valueAt, substitute, check, run, parsePath, evaluate, LogWatch, problemLines } = require("./scenario");
 
 const screen = {
   title: "Librarian",
@@ -24,6 +24,8 @@ test("a path walks keys, indexes, filters and counts", () => {
   assert.equal(valueAt(screen, "widgets[text~=currency].x"), 200);
   assert.equal(valueAt(screen, "widgets[text=Done].visible"), false);
   assert.equal(valueAt(screen, "offers[index=1].sell.id"), "minecraft:emerald");
+  assert.equal(valueAt(screen, "offers[sell.id~=bookshelf].buy.count"), 9);
+  assert.equal(valueAt(screen, "offers[sell.nothing=1]"), undefined);
   assert.deepEqual(valueAt(screen, ""), screen);
 });
 
@@ -73,6 +75,9 @@ function fake(answers) {
   return {
     calls,
     async call(side, op, args) {
+      // The runner asks which version the game is before it starts; a game that was not
+      // scripted to say is one that cannot, and that question is not part of the scenario.
+      if (op === "info" && !("info" in answers)) throw new Error("no such operation");
       calls.push({ side, op, args });
       const answer = answers[op];
       if (answer instanceof Error) throw answer;
@@ -133,4 +138,336 @@ test("one step's answer feeds the next step's arguments and expectations", async
   assert.equal(report.ok, true, JSON.stringify(report.steps));
   assert.deepEqual(puppet.calls[1].args, { index: 2 });
   assert.deepEqual(report.steps[2].shown, { id: "saros:euro", count: 7 });
+});
+
+test("a sum over saved values, read by hand and never by eval", () => {
+  const saved = { before: { count: 40, offers: [{ price: 7 }] }, paid: "3" };
+  assert.equal(evaluate("before.count - 3 * before.offers[0].price", saved), 19);
+  assert.equal(evaluate("(before.count - 4) / paid", saved), 12);
+  assert.equal(evaluate("-before.count % 7", saved), -5);
+  assert.equal(evaluate("min(before.count, 9) + floor(7 / 2) + abs(-1)", saved), 13);
+  assert.equal(evaluate("before.offers# + 0.1 + 0.2", saved), 1.3);
+  assert.equal(substitute("${= before.count - 1}", saved), 39);
+  assert.equal(substitute("has ${= before.count * 2} left", saved), "has 80 left");
+  assert.deepEqual(substitute({ equals: "${=before.offers[-1].price+1}" }, saved), { equals: 8 });
+  assert.throws(() => evaluate("before.count +", saved), /missing/);
+  assert.throws(() => evaluate("before.offers", saved), /not a number/);
+  assert.throws(() => evaluate("process.exit(1)", saved), /nothing was saved as "process"/);
+  assert.throws(() => evaluate("1; 2", saved), /cannot read/);
+});
+
+/** A game that answers from a script, one answer per call. */
+function scripted(answers) {
+  const asked = [];
+  return {
+    asked,
+    call: async (side, op, args) => {
+      if (op === "info" && !("info" in answers)) throw new Error("no such operation");
+      asked.push({ side, op, args });
+      const next = answers[op];
+      const answer = Array.isArray(next) ? (next.length > 1 ? next.shift() : next[0]) : next;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  };
+}
+
+test("teardown runs whatever happened, and setup that failed skips the steps", async () => {
+  const puppet = scripted({ give: {}, look: { count: 1 }, clear: {}, never: new Error("no such thing") });
+  const failedStep = await run(puppet, {
+    setup: [{ op: "give" }],
+    steps: [{ op: "look", expect: [{ path: "count", equals: 2 }] }, { op: "look" }],
+    teardown: [{ op: "never" }, { op: "clear" }],
+  });
+  assert.equal(failedStep.ok, false);
+  assert.deepEqual(puppet.asked.map((each) => each.op), ["give", "look", "never", "clear"]);
+  assert.equal(failedStep.steps[3].phase, "teardown");
+  assert.equal(failedStep.of, 5);
+
+  const second = scripted({ clear: {}, never: new Error("no such thing") });
+  const failedSetup = await run(second, { setup: [{ op: "never" }], steps: [{ op: "look" }], teardown: [{ op: "clear" }] });
+  assert.equal(failedSetup.ok, false);
+  assert.deepEqual(second.asked.map((each) => each.op), ["never", "clear"]);
+});
+
+test("eventually asks again until the expectations hold, and gives up in time", async () => {
+  const puppet = scripted({ look: [{ count: 0 }, { count: 0 }, { count: 5 }] });
+  const report = await run(puppet, { steps: [{ op: "look", eventually: 2000, save: "seen",
+    expect: [{ path: "count", gte: 5 }] }] });
+  assert.equal(report.ok, true);
+  assert.equal(report.steps[0].asked, 3);
+  assert.equal(report.saved.seen.count, 5);
+
+  const never = await run(scripted({ look: { count: 0 } }),
+    { steps: [{ op: "look", eventually: 250, expect: [{ path: "count", gte: 5 }] }] });
+  assert.equal(never.ok, false);
+  assert.match(never.steps[0].problems[0], /expected gte 5/);
+});
+
+test("a step that should be refused fails when it is answered", async () => {
+  const report = await run(scripted({ look: {} }), { steps: [{ op: "look", expect_error: "no screen" }] });
+  assert.equal(report.ok, false);
+});
+
+test("the lines of a log that say something went wrong", () => {
+  const log = [
+    "[12:00:01] [Render thread/INFO] (Minecraft) Stopping!",
+    "[12:00:02] [Server thread/ERROR] (get_rich) Could not price minecraft:cake",
+    "[12:00:03] [Render thread/WARN] (Minecraft) Something about an Error in a name",
+    "java.lang.IllegalStateException: boom",
+    "\tat com.example.Thing.run(Thing.java:12)",
+    "[12:00:04] [main/FATAL] (mixin) Mixin apply failed",
+  ].join("\n");
+  assert.deepEqual(problemLines(log), [
+    "[12:00:02] [Server thread/ERROR] (get_rich) Could not price minecraft:cake",
+    "java.lang.IllegalStateException: boom",
+    "[12:00:04] [main/FATAL] (mixin) Mixin apply failed",
+  ]);
+});
+
+test("a log is read from where it ended when the run began, and known errors can be let by", () => {
+  const files = { "a.log": "[x] [t/ERROR] old\n" };
+  const fake = {
+    statSync: (file) => ({ size: Buffer.byteLength(files[file]) }),
+    openSync: (file) => file,
+    readSync: (file, buffer, offset, length, position) => Buffer.from(files[file]).copy(buffer, 0, position, position + length),
+    closeSync: () => {},
+  };
+  const watch = new LogWatch(["a.log"], fake);
+  assert.deepEqual(watch.problems(), []);
+  files["a.log"] += "[x] [t/INFO] fine\n[x] [t/ERROR] new one\n[x] [t/ERROR] known: narrator\n";
+  assert.deepEqual(watch.problems().map((each) => each.line), ["[x] [t/ERROR] new one", "[x] [t/ERROR] known: narrator"]);
+  assert.deepEqual(watch.problems(["narrator"]).map((each) => each.line), ["[x] [t/ERROR] new one"]);
+  // Shorter than it was: the game restarted, and the whole of the new log counts.
+  files["a.log"] = "[x] [t/ERROR] after restart\n";
+  assert.deepEqual(watch.problems().map((each) => each.line), ["[x] [t/ERROR] after restart"]);
+});
+
+test("a PNG survives being written and read, whatever filter its lines use", () => {
+  const png = require("./png");
+  const zlib = require("zlib");
+  const image = { width: 3, height: 2, data: Buffer.from([
+    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255,
+    10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 128]) };
+  assert.deepEqual(png.decode(png.encode(image)), image);
+  assert.throws(() => png.decode(Buffer.from("not a png at all")), /not a PNG/);
+
+  // A hand-made RGB image whose second line uses the Paeth filter against the first.
+  const lines = Buffer.from([0, 10, 20, 30, 40, 50, 60, 4, 1, 1, 1, 1, 1, 1]);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(2, 0);
+  header.writeUInt32BE(2, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const chunkOf = (type, body) => {
+    const out = Buffer.alloc(12 + body.length);
+    out.writeUInt32BE(body.length, 0);
+    out.write(type, 4, "ascii");
+    body.copy(out, 8);
+    return out; // the decoder does not check a CRC: the game wrote the file a moment ago
+  };
+  const file = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunkOf("IHDR", header), chunkOf("IDAT", zlib.deflateSync(lines)), chunkOf("IEND", Buffer.alloc(0))]);
+  const decoded = png.decode(file);
+  assert.deepEqual([...decoded.data], [10, 20, 30, 255, 40, 50, 60, 255, 11, 21, 31, 255, 41, 51, 61, 255]);
+});
+
+test("two screenshots are compared within a tolerance, in a region, and the difference is drawn", () => {
+  const png = require("./png");
+  const blank = (width, height, value) => ({ width, height, data: Buffer.alloc(width * height * 4, value) });
+  const first = blank(10, 10, 100);
+  const second = blank(10, 10, 104);
+  assert.equal(png.diff(first, second).different, 0, "a dither is not a difference");
+  for (let pixel = 0; pixel < 5; pixel++) second.data[pixel * 4] = 255;
+  const outcome = png.diff(first, second);
+  assert.equal(outcome.different, 5);
+  assert.equal(outcome.percent, 5);
+  assert.deepEqual([...outcome.image.data.subarray(0, 4)], [255, 0, 0, 255]);
+  assert.equal(png.diff(first, second, { region: { x: 0, y: 1, w: 10, h: 9 } }).different, 0);
+  assert.equal(png.diff(first, second, { tolerance: 200 }).different, 0);
+  assert.equal(png.diff(first, blank(10, 11, 100)).same_size, false);
+});
+
+test("a golden stays under the scenario's folder: a downloaded scenario writes nowhere else", () => {
+  const os = require("os");
+  const fsReal = require("fs");
+  const pathOf = require("path");
+  const { compareGolden } = require("./scenario");
+  const dir = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-golden-escape-"));
+  const outside = pathOf.join(os.tmpdir(), "puppet-escaped-" + process.pid + ".png");
+  try {
+    const shot = pathOf.join(dir, "shot.png");
+    fsReal.writeFileSync(shot, "not really a png");
+    for (const file of ["../escaped.png", "../../escaped.png", outside, "sub/../../escaped.png", "notes.txt", "", "."]) {
+      for (const updateGolden of [false, true]) {
+        const problem = compareGolden({ file }, { path: shot }, { baseDir: dir, updateGolden }, {});
+        assert.equal(typeof problem, "string", JSON.stringify(file) + " was accepted");
+      }
+    }
+    assert.equal(fsReal.existsSync(outside), false);
+    assert.equal(fsReal.existsSync(pathOf.join(dir, "..", "escaped.png")), false);
+    // And what the game says it took must be a picture too.
+    assert.equal(typeof compareGolden({ file: "ok.png" }, { path: pathOf.join(dir, "shot.txt") }, { baseDir: dir }, {}), "string");
+    // One under the folder is still fine, in a folder of its own as well.
+    assert.equal(compareGolden({ file: "golden/deep/ok.png" }, { path: shot }, { baseDir: dir }, {}), null);
+  } finally {
+    fsReal.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a golden is written the first time and compared from then on", () => {
+  const fsReal = require("fs");
+  const os = require("os");
+  const pathOf = require("path");
+  const png = require("./png");
+  const { compareGolden } = require("./scenario");
+  const dir = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-golden-"));
+  try {
+    const shot = pathOf.join(dir, "shot.png");
+    const image = { width: 8, height: 8, data: Buffer.alloc(8 * 8 * 4, 50) };
+    fsReal.writeFileSync(shot, png.encode(image));
+    const golden = { file: "golden/shot.png", max_percent: 1 };
+    const first = {};
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, first), null);
+    assert.ok(first.golden.written.endsWith("shot.png"));
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, {}), null);
+
+    image.data.fill(250, 0, 8 * 4 * 4);
+    fsReal.writeFileSync(shot, png.encode(image));
+    const entry = {};
+    const problem = compareGolden(golden, { path: shot }, { baseDir: dir }, entry);
+    assert.match(problem, /differs from golden\/shot.png in 50% of pixels/);
+    assert.ok(fsReal.existsSync(entry.golden.diff));
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir, updateGolden: true }, {}), null);
+    assert.equal(compareGolden(golden, { path: shot }, { baseDir: dir }, {}), null);
+    assert.match(compareGolden(golden, {}, { baseDir: dir }, {}), /answers with a "path"/);
+  } finally {
+    fsReal.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reports become JUnit XML that a CI can show, whatever the game said", () => {
+  const { junitXml } = require("./junit");
+  const xml = junitXml([{ name: "buy <apples> & pay", failed: 1, steps: [
+    { step: 1, side: "client", op: "screen", ok: true, ms: 12 },
+    { step: 2, side: "client", op: "click_widget", ok: true, skipped: true, ms: 1 },
+    { step: 3, side: "server", op: "count", ok: false, ms: 5, note: "the server agrees",
+      problems: ["the answer is 3, expected 20", "second \u0007 problem"], phase: "teardown" }],
+    log_problems: [{ file: "latest.log", line: "[x] [Server thread/ERROR] boom" }] }]);
+  assert.match(xml, /<testsuite name="buy &lt;apples&gt; &amp; pay" tests="4" failures="2" skipped="1"/);
+  assert.match(xml, /name="2\. client click_widget"[^>]*><skipped\/>/);
+  assert.match(xml, /name="3\. server count \(teardown\) - the server agrees"/);
+  assert.match(xml, /<failure message="the answer is 3, expected 20">/);
+  assert.match(xml, /the game&apos;s log|the game's log/);
+  assert.ok(!xml.includes("\u0007"));
+});
+
+test("a game can be called by name, and a Windows drive is not a name", () => {
+  const { parseSide, named } = require("./lib");
+  assert.deepEqual(parseSide("client"), { side: "client", game: undefined });
+  assert.deepEqual(parseSide("server@second"), { side: "server", game: "second" });
+  assert.deepEqual(named("second=E:/games/two"), { game: "second", root: "E:/games/two" });
+  assert.deepEqual(named("E:/games/two"), { root: "E:/games/two" });
+  assert.deepEqual(named("C:\\games\\a=b"), { root: "C:\\games\\a=b" });
+});
+
+test("launch knows a multi-loader project from a single-loader one", () => {
+  const { plan } = require("./launch");
+  const here = require("path").resolve(__dirname, "..", "..");
+  assert.equal(plan("client", { project: here, loader: "fabric" }).task, ":fabric:runClient");
+  assert.equal(plan("server", { project: here, loader: "neoforge" }).task, ":neoforge:runServer");
+  assert.equal(plan("client", { project: __dirname, loader: "fabric" }).task, "runClient");
+  assert.throws(() => plan("both", { project: here, loader: "fabric" }), /client or server/);
+});
+
+test("a step can compare two parts of its own answer", async () => {
+  const button = { widgets: [{ text: "Pay in: Coins", w: 76, text_w: 70 }] };
+  const step = { op: "screen", save: "fit", expect: [{ path: "widgets[0].text_w", lt: "${fit.widgets[0].w}" }] };
+  assert.equal((await run(scripted({ screen: button }), { steps: [step] })).ok, true);
+  button.widgets[0].text_w = 104;
+  const clipped = await run(scripted({ screen: button }), { steps: [step] });
+  assert.equal(clipped.ok, false);
+  assert.match(clipped.steps[0].problems[0], /is 104, expected lt 76/);
+});
+
+test("references nest, and let gives a name to what the steps after it keep saying", async () => {
+  const saved = { counter: { offers: [{ buy: { id: "mod:euro_2", count: 4 } }] },
+    wallet: { coins: [{ item: "mod:euro_1", units: 100 }, { item: "mod:euro_2", units: 200 }] } };
+  assert.equal(substitute("${wallet.coins[item=${counter.offers[0].buy.id}].units}", saved), 200);
+  assert.equal(substitute("costs ${= counter.offers[0].buy.count * wallet.coins[item=${counter.offers[0].buy.id}].units} units", saved),
+    "costs 800 units");
+
+  const puppet = scripted({ screen: saved.counter, wallet: saved.wallet, pay: {} });
+  const report = await run(puppet, { steps: [
+    { op: "screen", save: "counter" },
+    { op: "wallet", save: "wallet" },
+    { let: { coin: "${wallet.coins[item=${counter.offers[0].buy.id}].units}" } },
+    { let: { price: "${= counter.offers[0].buy.count * coin}", trades: "${= min(floor(2000 / (counter.offers[0].buy.count * coin)), 16)}" }, show: true },
+    { op: "pay", args: { units: "${price}" } },
+    { let: { broken: "${= nothing.here}" } } ] }, { keepGoing: true });
+  assert.equal(report.saved.price, 800);
+  assert.equal(report.saved.trades, 2);
+  assert.deepEqual(puppet.asked[2].args, { units: 800 });
+  assert.deepEqual(report.steps[3].shown, { price: 800, trades: 2 });
+  assert.equal(report.steps[5].ok, false);
+  assert.match(report.steps[5].problems[0], /nothing was saved as "nothing"/);
+});
+
+test("what let works out can be expected of, and a failure shows the sums", async () => {
+  const report = await run(scripted({}), { steps: [
+    { let: { before: 2000, after: 400, price: 800 } },
+    { let: { spent: "${= before - after}" }, expect: [{ path: "spent", equals: "${= 2 * price}" }] },
+    { let: { lost: "${= before - after - 2 * price - 1}" }, expect: [{ path: "lost", gte: 0 }] } ] }, { keepGoing: true });
+  assert.equal(report.steps[1].ok, true);
+  assert.equal(report.steps[2].ok, false);
+  assert.match(report.steps[2].problems[0], /"lost" is -1, expected gte 0/);
+  assert.deepEqual(report.steps[2].shown, { lost: -1 });
+});
+
+test("a mod and tools of different ages say so, in words that name which to update", () => {
+  const { mismatch, PROTOCOLS } = require("./lib");
+  assert.equal(mismatch({ protocol: PROTOCOLS[0] }), null);
+  assert.match(mismatch({}), /older than these tools.*update the mod/);
+  assert.match(mismatch({ protocol: 99 }), /speaks protocol 99.*update the tools/);
+  assert.match(mismatch({ protocol: 0 }), /no longer do.*update the mod/);
+});
+
+test("consent is one directory at a time, kept in the home directory, and can be taken back", () => {
+  const fsReal = require("fs");
+  const os = require("os");
+  const pathOf = require("path");
+  const { setAllowed, readAllowed, consentFile } = require("./lib");
+  const home = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-home-"));
+  try {
+    assert.deepEqual(readAllowed(home), []);
+    setAllowed("C:/games/one", true, home);
+    setAllowed("C:/games/two", true, home);
+    setAllowed("c:/GAMES/one/", true, home);
+    assert.equal(readAllowed(home).length, 2, "the same directory written another way is the same directory");
+    assert.ok(fsReal.readFileSync(consentFile(home), "utf8").includes("Nothing you download should ever write here"));
+    setAllowed("C:/games/one", false, home);
+    assert.deepEqual(readAllowed(home).map((each) => pathOf.basename(each)), ["two"]);
+    fsReal.writeFileSync(consentFile(home), "not json");
+    assert.deepEqual(readAllowed(home), [], "an unreadable file allows nothing");
+  } finally {
+    fsReal.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a value may depend on the game's version, since the game's commands do", async () => {
+  const { forVersion, compareVersions } = require("./scenario");
+  assert.equal(compareVersions("1.20.1", "1.20.5"), -1);
+  assert.equal(compareVersions("1.21.1", "1.20.5"), 1);
+  assert.equal(compareVersions("1.21", "1.21.0"), 0);
+  const give = { command: { "mc<1.20.5": "give @s sword{Enchantments:[]}", "else": "give @s sword[enchantments={}]" } };
+  assert.deepEqual(forVersion(give, "1.20.1"), { command: "give @s sword{Enchantments:[]}" });
+  assert.deepEqual(forVersion(give, "1.21.1"), { command: "give @s sword[enchantments={}]" });
+  assert.deepEqual(forVersion(give, undefined), { command: "give @s sword[enchantments={}]" }, "nobody to ask: else");
+  // An ordinary object is left alone, however it is keyed.
+  assert.deepEqual(forVersion({ equals: { id: "minecraft:apple", count: 4 } }, "1.20.1"), { equals: { id: "minecraft:apple", count: 4 } });
+  assert.deepEqual(forVersion({ expect: [{ path: "a", equals: { "mc>=1.21": 2, "else": 1 } }] }, "1.21.1"), { expect: [{ path: "a", equals: 2 }] });
+
+  const puppet = scripted({ info: { minecraft: "1.20.1" }, command: {} });
+  await run(puppet, { steps: [{ side: "server", op: "command", args: give }] });
+  assert.deepEqual(puppet.asked.find((each) => each.op === "command").args, { command: "give @s sword{Enchantments:[]}" });
 });

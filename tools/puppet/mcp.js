@@ -6,9 +6,11 @@
  * Register it with the agent's host, pointing it at the project whose game
  * directories it should look in:
  *
- *   "mc-puppet": { "type": "stdio", "command": "node",
- *                  "args": ["<path>/tools/puppet/mcp.js"],
+ *   "mc-puppet": { "type": "stdio", "command": "npx",
+ *                  "args": ["-y", "mc-puppet", "mcp"],
  *                  "env": { "MC_PUPPET_DIRS": "E:/MineMods/my_mod" } }
+ *
+ * or, from a checkout, "command": "node", "args": ["<path>/tools/puppet/mcp.js"].
  *
  * Five tools, on purpose. Every tool's description is paid for in every
  * conversation, and the game already knows its own operations: puppet_help
@@ -65,14 +67,21 @@ const TOOLS = [
     name: "puppet_run",
     description: "Runs a whole scenario in one call and reports which steps passed. Each step is "
       + "{side?, op, args?, expect?: [{path, equals|not|contains|matches|gt|gte|lt|lte|exists}], save?: name, "
-      + "show?: path|true, expect_error?: text, optional?: bool, note?}. Paths: a.b, a[0], a[key=value], "
-      + "a[key~=part], a# (count). \"${name.path}\" reuses a saved answer. Stops at the first failure unless "
-      + "keep_going. Give either steps or file.",
+      + "show?: path|true, expect_error?: text, optional?: bool, eventually?: true|ms, golden?: {file, "
+      + "max_percent?, tolerance?, region?}, note?}. Paths: a.b, a[0], a[key=value], a[key~=part] (the key may "
+      + "be a path), a# (count). \"${name.path}\" reuses a saved answer and \"${= a.count - 2 * b.price}\" "
+      + "computes with them. setup and teardown run around steps, teardown always. Wait with the wait_until op "
+      + "(any op, a path, an expectation, checked each tick), never a number of ticks. Fails if the game logged "
+      + "an error meanwhile (allow_log: [regex]). Stops at the first failure unless keep_going. Give steps or file.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string" },
         steps: { type: "array", items: { type: "object" } },
+        setup: { type: "array", items: { type: "object" } },
+        teardown: { type: "array", items: { type: "object" } },
+        allow_log: { type: "array", items: { type: "string" } },
+        update_golden: { type: "boolean", description: "Write golden screenshots from this run instead of comparing." },
         file: { type: "string", description: "A scenario JSON file instead of inline steps." },
         keep_going: { type: "boolean" },
       },
@@ -119,9 +128,12 @@ async function callTool(name, args) {
     return text(args.path ? scenario.valueAt(result, args.path) ?? null : result);
   }
   if (name === "puppet_run") {
-    const loaded = args.file ? JSON.parse(fs.readFileSync(args.file, "utf8")) : { name: args.name, steps: args.steps };
+    const loaded = args.file ? JSON.parse(fs.readFileSync(args.file, "utf8"))
+      : { name: args.name, steps: args.steps, setup: args.setup, teardown: args.teardown, allow_log: args.allow_log };
     if (!loaded || !Array.isArray(loaded.steps)) throw new Error("give \"steps\" (an array) or \"file\"");
-    const report = await scenario.run(puppet, loaded, { keepGoing: Boolean(args.keep_going) });
+    const report = await scenario.run(puppet, loaded, { keepGoing: Boolean(args.keep_going),
+      updateGolden: Boolean(args.update_golden),
+      baseDir: args.file ? require("path").dirname(require("path").resolve(args.file)) : process.cwd() });
     // What passed is one line. What failed, or was asked to be shown, is spelt out.
     const lines = [`${report.ok ? "PASS" : "FAIL"} ${report.name}: ${report.passed}/${report.of} steps`
       + (report.ran < report.of ? `, stopped after step ${report.ran}` : "")];
@@ -132,6 +144,7 @@ async function callTool(name, args) {
       for (const problem of step.problems || []) lines.push("    " + problem);
       if (step.shown !== undefined) lines.push("    " + JSON.stringify(step.shown));
     }
+    for (const problem of report.log_problems || []) lines.push("LOG " + problem.line);
     return text(lines.join("\n"));
   }
   if (name === "puppet_screenshot") {
@@ -182,7 +195,7 @@ async function handle(line) {
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "mc-puppet", version: "0.1.0" },
+          serverInfo: { name: "mc-puppet", version: require("./package.json").version },
         },
       });
     } else if (request.method === "tools/list") {
