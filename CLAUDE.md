@@ -89,8 +89,18 @@ else it is off until told otherwise. Never change that default.
 
 Verified on Fabric 1.21.1: client bridge (screens, clicks, world creation,
 trading, screenshot, quit), server bridge inside single-player and on a
-dedicated server (no client class loaded). **NeoForge builds and has not been
-launched.**
+dedicated server (no client class loaded). Since then, and by 2026-09-21: the
+scenarios on all four targets (1.21.1 Fabric and NeoForge, 1.20.1 Fabric and
+Forge) in development environments; the built jar in a real NeoForge 1.21.1
+server (`tools/prod-check.js`); the live bridge attacked
+(`tools/attack-check.js`). **Not tried:** the other three jars outside a
+development environment, and a real client from a launcher.
+
+**Published**: 0.1.2, a beta, on npm (`mc-puppet`), on GitHub
+(`pain-o-d/mc_puppet`, public) and submitted to Modrinth (`mc-puppet`).
+**`docs/RELEASING.md` is how**, with the reason beside every rule; read it
+before touching a version number. `docs/ROADMAP.md` has what an independent
+security review found and what 1.0.0 waits for.
 
 ## Git workflow
 
