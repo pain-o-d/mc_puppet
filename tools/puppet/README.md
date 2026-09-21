@@ -6,9 +6,16 @@ screen as data, clicks and keys through the game's own input handlers,
 commands with their output, screenshots — so a mod can be tested without a
 person at the keyboard.
 
-These tools talk to the mod; they do nothing without it. The mod, for
-Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric, Forge), and the whole
-manual, are at the project's page. No dependencies; Node 18 or later.
+These tools talk to the mod; they do nothing without it.
+
+- **The mod**, for Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric,
+  Forge): [modrinth.com/mod/mc-puppet](https://modrinth.com/mod/mc-puppet)
+- **The manual** — every operation, the scenario language, worked examples —
+  and the source: [github.com/pain-o-d/mc_puppet](https://github.com/pain-o-d/mc_puppet#readme)
+- **Something wrong?** [Issues](https://github.com/pain-o-d/mc_puppet/issues)
+
+No dependencies; Node 18 or later. The tools and the mod say which version of
+the protocol they speak, and a mismatch is reported as one: `mc-puppet version`.
 
 ```bash
 npx mc-puppet status                        # which games are listening

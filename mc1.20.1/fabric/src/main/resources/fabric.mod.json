@@ -8,7 +8,9 @@
     "pain_o_d"
   ],
   "contact": {
-    "sources": "https://github.com/pain-o-d/mc_puppet"
+    "homepage": "https://modrinth.com/mod/mc-puppet",
+    "sources": "https://github.com/pain-o-d/mc_puppet",
+    "issues": "https://github.com/pain-o-d/mc_puppet/issues"
   },
   "license": "MIT",
   "icon": "assets/mc_puppet/icon.png",
