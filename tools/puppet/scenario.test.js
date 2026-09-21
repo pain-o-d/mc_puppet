@@ -288,6 +288,33 @@ test("two screenshots are compared within a tolerance, in a region, and the diff
   assert.equal(png.diff(first, blank(10, 11, 100)).same_size, false);
 });
 
+test("a golden stays under the scenario's folder: a downloaded scenario writes nowhere else", () => {
+  const os = require("os");
+  const fsReal = require("fs");
+  const pathOf = require("path");
+  const { compareGolden } = require("./scenario");
+  const dir = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-golden-escape-"));
+  const outside = pathOf.join(os.tmpdir(), "puppet-escaped-" + process.pid + ".png");
+  try {
+    const shot = pathOf.join(dir, "shot.png");
+    fsReal.writeFileSync(shot, "not really a png");
+    for (const file of ["../escaped.png", "../../escaped.png", outside, "sub/../../escaped.png", "notes.txt", "", "."]) {
+      for (const updateGolden of [false, true]) {
+        const problem = compareGolden({ file }, { path: shot }, { baseDir: dir, updateGolden }, {});
+        assert.equal(typeof problem, "string", JSON.stringify(file) + " was accepted");
+      }
+    }
+    assert.equal(fsReal.existsSync(outside), false);
+    assert.equal(fsReal.existsSync(pathOf.join(dir, "..", "escaped.png")), false);
+    // And what the game says it took must be a picture too.
+    assert.equal(typeof compareGolden({ file: "ok.png" }, { path: pathOf.join(dir, "shot.txt") }, { baseDir: dir }, {}), "string");
+    // One under the folder is still fine, in a folder of its own as well.
+    assert.equal(compareGolden({ file: "golden/deep/ok.png" }, { path: shot }, { baseDir: dir }, {}), null);
+  } finally {
+    fsReal.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a golden is written the first time and compared from then on", () => {
   const fsReal = require("fs");
   const os = require("os");

@@ -15,6 +15,10 @@
  *   node puppet.js allow <gameDir>                let this game be driven outside a development
  *                                                 environment (a real launcher's instance); "disallow"
  *                                                 takes it back, "allowed" lists them
+ *   node puppet.js mcp                            be an MCP server on stdio, for an AI coding agent
+ *   node puppet.js version                        these tools' version, and the protocols they speak
+ *
+ * Installed from npm the command is "mc-puppet": npx mc-puppet status.
  *
  *   --dir <gameDir>   where to look (repeatable); else MC_PUPPET_DIRS, else here.
  *                     name=<gameDir> names a game: "side": "client@name" in a scenario
@@ -182,7 +186,14 @@ function print(report) {
   }
 }
 
-main().then((code) => process.exit(code), (failure) => {
-  console.error("puppet: " + failure.message);
-  process.exit(2);
-});
+if (process.argv[2] === "mcp") {
+  // A server, not a command: it lives as long as its stdin does, and nothing here may exit for it.
+  require("./mcp");
+} else if (process.argv[2] === "version" || process.argv[2] === "--version") {
+  console.log(`mc-puppet ${require("./package.json").version}, protocol ${require("./lib").PROTOCOLS.join(", ")}`);
+} else {
+  main().then((code) => process.exit(code), (failure) => {
+    console.error("puppet: " + failure.message);
+    process.exit(2);
+  });
+}

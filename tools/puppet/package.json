@@ -1,0 +1,47 @@
+{
+  "name": "mc-puppet",
+  "version": "0.1.0",
+  "description": "See and drive a running Minecraft from a script, CI or an AI coding agent: the command line tools and MCP server for the MC Puppet mod.",
+  "license": "MIT",
+  "author": "pain_o_d",
+  "homepage": "https://github.com/pain-o-d/mc_puppet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pain-o-d/mc_puppet.git",
+    "directory": "tools/puppet"
+  },
+  "bugs": {
+    "url": "https://github.com/pain-o-d/mc_puppet/issues"
+  },
+  "keywords": [
+    "minecraft",
+    "modding",
+    "testing",
+    "fabric",
+    "neoforge",
+    "forge",
+    "mcp",
+    "automation"
+  ],
+  "bin": {
+    "mc-puppet": "puppet.js"
+  },
+  "main": "lib.js",
+  "files": [
+    "puppet.js",
+    "mcp.js",
+    "lib.js",
+    "scenario.js",
+    "launch.js",
+    "junit.js",
+    "png.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test scenario.test.js"
+  }
+}

@@ -106,6 +106,9 @@ public final class ServerOps {
         info.addProperty("mod_version", dev.architectury.platform.Platform.getMod("mc_puppet").getVersion());
         info.addProperty("development", com.modrinth.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", server.getVersion());
+        // As the client's info has it: a scenario that asks only the server still learns where it ran.
+        info.addProperty("loader", Platform.isFabric() ? "fabric"
+                : com.modrinth.pain_o_d.mc_puppet.compat.Compat.OTHER_LOADER);
         info.addProperty("dedicated", server.isDedicated());
         // The save's folder, which is what open_world takes: a scenario that leaves a world can come back to it.
         java.nio.file.Path save = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT).toAbsolutePath().normalize();

@@ -46,7 +46,31 @@ public final class McPuppet {
      * environment. It can only make things stricter; nothing says the opposite.
      */
     public static boolean development() {
-        return Platform.isDevelopmentEnvironment() && !Boolean.getBoolean("mc_puppet.pretend_production");
+        return Platform.isDevelopmentEnvironment() && !Boolean.getBoolean("mc_puppet.pretend_production")
+                && !LOOKS_LIKE_A_REAL_GAME;
+    }
+
+    /**
+     * What the loader says is not all that is asked, because on Fabric it says what it is told:
+     * a development environment there is the system property {@code fabric.development}, and a
+     * shipped {@code -Dfabric.development=true} would have let a player's game skip consent
+     * altogether. Found by the review before the first release.
+     *
+     * <p>So the game is looked at as well. A real Fabric game runs in intermediary names, where
+     * an identifier is {@code class_2960} and has been since 1.14; a development environment
+     * runs in a project's own mappings and has no such class. Forge and NeoForge decide from
+     * how the game was launched, which no property changes, and their production games are in
+     * the same names a developer may use, so there is nothing of the kind to look for there.
+     */
+    private static final boolean LOOKS_LIKE_A_REAL_GAME = Platform.isFabric() && has("net.minecraft.class_2960");
+
+    private static boolean has(String className) {
+        try {
+            Class.forName(className, false, McPuppet.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError absent) {
+            return false;
+        }
     }
 
     public static void init() {
@@ -58,7 +82,9 @@ public final class McPuppet {
             LOGGER.warn("MC Puppet was switched on by a config file or a launch option, and has stayed OFF: "
                     + "this is not a development environment, and nobody at this machine has allowed this game "
                     + "to be driven. If you are testing a mod here, run: mc-puppet allow \"{}\". If you are "
-                    + "not, nothing needs doing; you may remove the mod.", Platform.getGameFolder());
+                    + "not, nothing needs doing; you may remove the mod. ({})", Platform.getGameFolder(),
+                    com.modrinth.pain_o_d.mc_puppet.core.Consent.refusal(
+                            com.modrinth.pain_o_d.mc_puppet.core.Consent.home(), Platform.getGameFolder()));
             return;
         }
         if (!config.enabled()) {

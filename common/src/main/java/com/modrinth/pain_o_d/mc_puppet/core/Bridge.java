@@ -51,6 +51,17 @@ public final class Bridge implements AutoCloseable {
     /** Connections at once. A test harness needs one; a few is slack, not a service. */
     private static final int MAX_CONNECTIONS = 8;
 
+    /**
+     * How long a connection may say nothing good before it is dropped. There are only eight
+     * places, and a page in a browser, which can reach this port though never past the token,
+     * could otherwise sit in all of them and keep the test harness out.
+     */
+    private static final int UNPROVEN_TIMEOUT_MS = 10_000;
+
+    /** Wrong tokens are worth one line in the log, and not a log full of them. */
+    private static final long WARN_EVERY_MS = 10_000;
+    private volatile long lastWarned;
+
     private final String side;
     private final Ops ops;
     private final String token;
@@ -68,6 +79,8 @@ public final class Bridge implements AutoCloseable {
         this.socket = socket;
         this.endpointFile = endpointFile;
         this.audit = new Audit(endpointFile.getParent(), side);
+        // A batch's steps and what a wait_until polls: run by Ops, never named on the wire as requests.
+        ops.tellOfInner(audit::wroteInner);
     }
 
     /**
@@ -83,6 +96,7 @@ public final class Bridge implements AutoCloseable {
         String token = newToken();
         Path directory = gameDir.resolve("mc_puppet");
         Files.createDirectories(directory);
+        keepToTheOwner(directory, "rwx------");
         Path endpointFile = directory.resolve("endpoint-" + side + ".json");
 
         JsonObject endpoint = new JsonObject();
@@ -93,8 +107,14 @@ public final class Bridge implements AutoCloseable {
         endpoint.addProperty("pid", ProcessHandle.current().pid());
         endpoint.addProperty("started", System.currentTimeMillis());
         endpoint.addProperty("protocol", Protocol.VERSION);
+        // Made empty and the owner's alone before the token goes into it: written first and
+        // closed to others after, it was anybody's to open in between.
+        Files.deleteIfExists(endpointFile);
+        if (directory.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+            Files.createFile(endpointFile, java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+        }
         Files.writeString(endpointFile, Protocol.GSON.toJson(endpoint), StandardCharsets.UTF_8);
-        keepToTheOwner(endpointFile);
 
         Bridge bridge = new Bridge(side, ops, token, socket, endpointFile);
         Thread acceptor = new Thread(bridge::accept, "mc_puppet-" + side + "-accept");
@@ -107,14 +127,19 @@ public final class Bridge implements AutoCloseable {
 
     /**
      * The token is what stands between this game and any program on the
-     * machine, and it is in this file. Where the file system can say so, only
-     * its owner may read it. Windows cannot be told this way; a profile
-     * directory there is the owner's already.
+     * machine, and it is in this directory, beside a log of what was asked.
+     * Where the file system can say so, only its owner may look inside.
+     *
+     * <p>Windows cannot be told this way, and is as open as the folder the
+     * game is in: the owner's alone under a user profile, and readable by
+     * every account on the machine in a folder like {@code D:\\Games}. The
+     * README says so; on a machine other people use, keep the game under your
+     * profile or leave the bridge off.
      */
-    private static void keepToTheOwner(Path file) {
+    private static void keepToTheOwner(Path path, String permissions) {
         try {
-            if (file.getFileSystem().supportedFileAttributeViews().contains("posix")) {
-                Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            if (path.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                Files.setPosixFilePermissions(path, java.nio.file.attribute.PosixFilePermissions.fromString(permissions));
             }
         } catch (IOException | UnsupportedOperationException | SecurityException unimportant) {
             // As readable as the directory it is in, which is what it was before this was tried.
@@ -201,6 +226,8 @@ public final class Bridge implements AutoCloseable {
                 BufferedWriter out = new BufferedWriter(
                         new OutputStreamWriter(connection.getOutputStream(), StandardCharsets.UTF_8))) {
             connection.setTcpNoDelay(true);
+            connection.setSoTimeout(UNPROVEN_TIMEOUT_MS);
+            boolean proven = false;
             String line;
             while (!closed && (line = readLine(in)) != null) {
                 if (line.isBlank()) {
@@ -211,12 +238,23 @@ public final class Bridge implements AutoCloseable {
                     request = Protocol.parse(line);
                 } catch (Protocol.Malformed malformed) {
                     write(out, Protocol.error(null, malformed.getMessage()));
+                    if (!proven) {
+                        // Not a client of this bridge: an HTTP request's first line, most likely.
+                        // One that has shown the token may still mistype a line and go on.
+                        return;
+                    }
                     continue;
                 }
                 if (!Protocol.tokenMatches(token, request.token())) {
                     write(out, Protocol.error(request.id(), "wrong or missing token; read it from "
                             + endpointFile.getFileName()));
+                    warnOfAWrongToken();
                     return;
+                }
+                if (!proven) {
+                    proven = true;
+                    // A harness may sit quiet between steps for as long as it likes.
+                    connection.setSoTimeout(0);
                 }
                 long asked = System.currentTimeMillis();
                 ops.run(request.op(), request.args())
@@ -237,6 +275,16 @@ public final class Bridge implements AutoCloseable {
         } finally {
             connections.remove(connection);
         }
+    }
+
+    private void warnOfAWrongToken() {
+        long now = System.currentTimeMillis();
+        if (now - lastWarned < WARN_EVERY_MS) {
+            return;
+        }
+        lastWarned = now;
+        LOGGER.warn("Something on this machine tried MC Puppet's {} bridge with a wrong or missing token, and was "
+                + "refused. A tool reading an old endpoint file does this once; anything else is worth a look.", side);
     }
 
     /** A line, or {@code null} at the end; a line past the limit ends the connection. */

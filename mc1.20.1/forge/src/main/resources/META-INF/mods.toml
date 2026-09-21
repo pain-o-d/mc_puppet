@@ -7,6 +7,7 @@ issueTrackerURL = "https://github.com/pain-o-d/mc_puppet/issues"
 modId = "mc_puppet"
 version = "${version}"
 displayName = "MC Puppet"
+logoFile = "assets/mc_puppet/icon.png"
 authors = "pain_o_d"
 displayURL = "https://github.com/pain-o-d/mc_puppet"
 description = '''

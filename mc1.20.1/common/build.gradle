@@ -25,6 +25,16 @@ sourceSets.main.java {
 }
 sourceSets.test.java.srcDir file('../../common/src/test/java')
 
+// The icon and whatever else is the same on every version. The mixin list is not: it
+// names the Java it was compiled for, and this build's is in src/main/resources.
+def sharedResources = file('../../common/src/main/resources')
+sourceSets.main.resources {
+    srcDir sharedResources
+    exclude { element ->
+        element.file.toPath().startsWith(sharedResources.toPath()) && element.name == 'mc_puppet.mixins.json'
+    }
+}
+
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
