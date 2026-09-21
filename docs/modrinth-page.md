@@ -9,7 +9,11 @@
     Categories        Utility, Library, Management   (it is a developer's tool: not Adventure, not Cursed)
     Client / server   Client: optional. Server: optional.   (either side works alone)
     License           MIT
-    Source / Issues   https://github.com/pain-o-d/mc_puppet  and  …/issues
+    Links             Source   https://github.com/pain-o-d/mc_puppet
+                      Issues   https://github.com/pain-o-d/mc_puppet/issues
+                      Wiki     https://github.com/pain-o-d/mc_puppet#readme          (the manual is the README)
+    And back          GitHub's "About" box: Website = https://modrinth.com/mod/mc-puppet; topics minecraft, minecraft-mod,
+                      fabric, neoforge, forge, testing, mcp, modding. npm's page takes its links from package.json.
     Version numbers   0.1.1+mc1.20.1-fabric, 0.1.1+mc1.20.1-forge, 0.1.1+mc1.21.1-fabric, 0.1.1+mc1.21.1-neoforge:
                       the loader is part of the number, since Modrinth's Maven finds a file by it and two
                       files under one number is one of them at random. Subtitle: "MC Puppet 0.1.1 — Forge 1.20.1".

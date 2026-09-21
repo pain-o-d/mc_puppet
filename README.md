@@ -1,5 +1,7 @@
 # MC Puppet
 
+**[The mod, on Modrinth](https://modrinth.com/mod/mc-puppet)** · **[The tools, on npm](https://www.npmjs.com/package/mc-puppet)** · [Releases](https://github.com/pain-o-d/mc_puppet/releases) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/pain-o-d/mc_puppet/issues)
+
 Lets a program on the same machine **see and drive a running Minecraft**, so a
 mod can be tested without a person at the keyboard.
 
@@ -102,8 +104,10 @@ a project; test infrastructure should not change by itself.
 
 ## Quick start
 
-1. Put the jar (and Architectury API) in `mods/`, or depend on it in your dev
-   environment (below).
+1. Get the jar for your loader and game version from
+   [Modrinth](https://modrinth.com/mod/mc-puppet/versions) (the same files, with checksums, are on the
+   [releases page](https://github.com/pain-o-d/mc_puppet/releases)). Put it, and Architectury API, in `mods/`, or
+   depend on it in your dev environment (below).
 2. Start the game with `-Dmc_puppet.enabled=true`.
 3. Talk to it. The tools are on npm as `mc-puppet`, with no dependencies
    (Node 18 or later):

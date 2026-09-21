@@ -3,6 +3,12 @@
 Versions are `<mod version>+mc<Minecraft version>`: the same mod version is
 the same features and the same protocol on every game it is built for.
 
+## Unreleased
+
+- Every place the project is found says where the rest of it is: the README
+  links to Modrinth and npm, the npm page to the mod and the manual, and the
+  mod menu in the game to the mod's page, its source and its issues.
+
 ## 0.1.1
 
 2026-09-21. **The first version published**, a beta: what has and has not been

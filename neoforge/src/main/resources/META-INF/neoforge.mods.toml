@@ -7,6 +7,7 @@ license = "MIT"
 modId = "mc_puppet"
 version = "${version}"
 displayName = "MC Puppet"
+displayURL = "https://modrinth.com/mod/mc-puppet"
 logoFile = "assets/mc_puppet/icon.png"
 authors = "pain_o_d"
 description = '''

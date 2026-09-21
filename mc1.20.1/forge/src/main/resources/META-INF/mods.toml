@@ -9,7 +9,7 @@ version = "${version}"
 displayName = "MC Puppet"
 logoFile = "assets/mc_puppet/icon.png"
 authors = "pain_o_d"
-displayURL = "https://github.com/pain-o-d/mc_puppet"
+displayURL = "https://modrinth.com/mod/mc-puppet"
 description = '''
 Lets a program on the same machine see and drive a running game - screens, widgets, slots, clicks, screenshots, commands, world state - so mods can be tested without a person at the keyboard. Off by default, loopback only, token protected. Ships with an MCP server for AI coding agents.
 '''
