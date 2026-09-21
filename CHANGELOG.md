@@ -3,6 +3,13 @@
 Versions are `<mod version>+mc<Minecraft version>`: the same mod version is
 the same features and the same protocol on every game it is built for.
 
+## Unreleased
+
+- The `-sources.jar` of each build holds the sources of what is in the jar. Those of
+  0.1.1 and 0.1.2 held one file of forty-four, the loader's entry point: the
+  common module, which is where the bridge is, was left out. Read the code in the
+  repository at the tag instead; it is what the jars were built from.
+
 ## 0.1.2
 
 2026-09-21. A beta.

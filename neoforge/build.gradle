@@ -72,3 +72,12 @@ remapJar {
     inputFile.set shadowJar.archiveFile
 }
 
+// The sources of what is in the jar, and the jar holds common as well as this module. Without
+// this the sources jar was one file of forty-four, the loader's entry point, and whoever opened
+// it to read the bridge they had just installed found nothing to read.
+sourcesJar {
+    def commonSources = project(':common').sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
