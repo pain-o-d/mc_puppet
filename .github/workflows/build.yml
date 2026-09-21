@@ -1,0 +1,126 @@
+# Builds all four jars and runs every test on each push and pull request. On a tag
+# vX.Y.Z it also tries the built jar in a real server and writes the GitHub release:
+# the jars, their sources, the tools as an npm tarball, and their checksums, under
+# that version's section of CHANGELOG.md.
+#
+# The release here is a record, tied to the commit it was built from. The places
+# people install from are Modrinth (the mod) and npm (the tools); publishing to
+# those is done by hand, by the owner.
+name: build
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'bugfix/**', 'release/**', 'hotfix/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here may write to the repository except the one job that makes a release.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1.20.1 is compiled with 17 and 1.21.1 with 21; Gradle's toolchains find both.
+      # The last one listed is the default, which is what runs Gradle and the real server.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build all four jars, run every test
+        run: sh tools/build-all.sh
+
+      - name: Pack the tools
+        run: cd tools/puppet && npm pack --pack-destination ../../build
+
+      - name: Gather what a release is made of
+        run: |
+          mkdir -p dist
+          for dir in fabric neoforge mc1.20.1/fabric mc1.20.1/forge; do
+            for jar in "$dir"/build/libs/mc_puppet-*.jar; do
+              case "$jar" in *-dev.jar|*-dev-shadow.jar) ;; *) cp "$jar" dist/ ;; esac
+            done
+          done
+          cp build/mc-puppet-*.tgz dist/
+          (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+          # Four mods, their four sources, the tools, the sums: anything else is a build that went wrong.
+          test "$(ls dist | wc -l)" -eq 10
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mc_puppet-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
+      # The built jar in a real server, outside any development environment: nothing opens
+      # without consent from the home directory. It downloads the game, so it runs for a
+      # release and when asked for, not for every push. --eula accepts Minecraft's EULA
+      # (https://aka.ms/MinecraftEULA) for a server nobody joins, which ends within minutes.
+      - name: The built jar in a real server
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: node tools/prod-check.js --eula
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mc_puppet-${{ github.sha }}
+          path: dist/
+
+      - name: The tag, the mod and the tools must name one version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mod="$(sed -n 's/^mod_version *= *//p' gradle.properties | sed 's/+.*//')"
+          old="$(sed -n 's/^mod_version *= *//p' mc1.20.1/gradle.properties | sed 's/+.*//')"
+          tools="$(node -p "require('./tools/puppet/package.json').version")"
+          echo "tag $version, 1.21.1 build $mod, 1.20.1 build $old, tools $tools"
+          test "$version" = "$mod" && test "$version" = "$old" && test "$version" = "$tools"
+
+      - name: This version's section of the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v want="## $version" '
+            $0 == want { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section '## $version'"; exit 1; }
+          {
+            echo
+            echo "---"
+            echo "Install the mod from [Modrinth](https://modrinth.com/mod/mc-puppet) and the tools with \`npx mc-puppet\`."
+            echo "The files here are the same ones, built from this tag by this repository's workflow;"
+            echo "\`SHA256SUMS\` is there to check a download against, wherever it came from."
+          } >> notes.md
+          cat notes.md
+
+      - name: Write the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "MC Puppet ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag
