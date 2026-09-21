@@ -16,17 +16,20 @@ tested without a person at the keyboard. Off by default, loopback only, token
 protected. Ships with an MCP server for AI coding agents.
 '''
 
+# One game, the one this build was tried on. The mod lives in mixins into the mouse, the
+# keyboard and the screens, which move between minor versions: a range left open at the top
+# told a launcher that 1.21.4 would do, and a player there would have met a crash, not a message.
 [[dependencies.mc_puppet]]
 modId = "neoforge"
 type = "required"
-versionRange = "[21.1,)"
+versionRange = "[21.1,21.2)"
 ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.mc_puppet]]
 modId = "minecraft"
 type = "required"
-versionRange = "[1.21.1,)"
+versionRange = "[1.21.1,1.21.2)"
 ordering = "NONE"
 side = "BOTH"
 

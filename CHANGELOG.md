@@ -3,10 +3,25 @@
 Versions are `<mod version>+mc<Minecraft version>`: the same mod version is
 the same features and the same protocol on every game it is built for.
 
+## 0.1.1
+
+2026-09-21. **The first version published**, a beta: what has and has not been
+tried is at the top of the README. It is 0.1.0, below, with one correction.
+
+- Each build names the one game it was tried on. 0.1.0 said `~1.21.1` and
+  `~1.20.1` on Fabric, which is any 1.21.x and any 1.20.x, and on NeoForge a
+  range with no top at all. The mod lives in mixins into the mouse, the
+  keyboard and the screens, which move between minor versions; on 1.21.4 a
+  launcher would have called it compatible and the game would have crashed
+  instead of saying the mod was for another version. Found before anything
+  was published, by being asked what the mod depends on.
+- The pages said "needs Architectury API", which is the whole of it on Forge
+  and NeoForge. On Fabric it needs Fabric API as well: not for itself, but
+  Architectury does.
+
 ## 0.1.0
 
-2026-09-21. The first release, **a beta**: what has and has not been tried is
-at the top of the README. Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric,
+2026-09-21. Tagged, built and never published: see 0.1.1. Minecraft 1.21.1 (Fabric, NeoForge) and 1.20.1 (Fabric,
 Forge), from one set of sources. Needs Architectury API.
 
 **What it does**
