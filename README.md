@@ -1,6 +1,6 @@
 # MC Puppet
 
-**[The mod, on Modrinth](https://modrinth.com/mod/mc-puppet)** · **[The tools, on npm](https://www.npmjs.com/package/mc-puppet)** · [Releases](https://github.com/pain-o-d/mc_puppet/releases) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/pain-o-d/mc_puppet/issues)
+**[The mod, on Modrinth](https://modrinth.com/mod/mc-puppet)** · **[The tools, on npm](https://www.npmjs.com/package/mc-puppet)** · [Releases](https://github.com/pain-o-d/mc_puppet/releases) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/pain-o-d/mc_puppet/issues) · [Report a vulnerability, privately](SECURITY.md)
 
 Lets a program on the same machine **see and drive a running Minecraft**, so a
 mod can be tested without a person at the keyboard.
