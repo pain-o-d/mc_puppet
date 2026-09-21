@@ -173,7 +173,7 @@ In short:
 | `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
 | `look` `hold` `tap` `move_to` `attack` `break_block` `stop` | the character |
 | `set_text` `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
-| `worlds` `create_world` `open_world` `leave_world` `window` `quit` `wait` | getting there |
+| `worlds` `create_world` `open_world` `join_server` `leave_world` `window` `quit` `wait` | getting there |
 
 | Server | |
 |---|---|
@@ -351,6 +351,37 @@ server, and only after the worlds are saved.
 `MC_PUPPET_DIRS=a=run1;b=run2` — and a step says `"side": "client@b"`. One
 game directory per game.
 
+**Several clients on one server.** A project has one `run/` and one player's
+name, and a multiplayer test needs more:
+
+```bash
+puppet launch server
+puppet launch client --name bot1,bot2,bot3 --server localhost:25565
+puppet run scenarios/two-clients-one-server.json
+puppet client@bot2 player
+puppet stop bot3          # or everything: puppet stop
+```
+
+Each name is a game directory of its own, `<loader>/runs/<name>`, made on first
+use from the `mods`, `config` and `options.txt` of the loader's `run/` (or from
+`--template <dir>`) and then left alone; the player is called by the same name
+unless `--username` says otherwise; the bridge takes the next free port by
+itself; and the folder's name is the game's, so `client@bot2` needs no `--dir`.
+The project's build file is not touched: an init script says all this to Gradle
+for the one run. Builds start one after another and the games load side by side;
+three dev clients were in a world 41 seconds after the command.
+
+`join_server {address}` is the operation underneath, followed by
+`wait {for: world}`, which ends at once with the server's own words if the
+player is turned away. It goes to `localhost` or a loopback address and to
+nothing else, for the reason the bridge is deaf anywhere else. **A test server
+on another machine** is reached by bringing its port here:
+`ssh -L 25565:localhost:25565 that-machine`, then `localhost:25565`. The
+connection is then one to this machine, which is true: whoever can open that
+tunnel can log in there. The server can stay bound to its own loopback, which
+an offline-mode server should be anyway. Its own bridge stays there with its
+token; ask it over RCON, or run the scenario's server steps on that machine.
+
 ## Operations of your own mod
 
 A test of a mod wants the mod's state as data, not what a command printed:
@@ -466,5 +497,10 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
   (a test runs behind other windows). The setting is not saved.
 - `use_entity` and `use_block` are checked by the server like any player's:
   stand within reach.
+- Dev clients have no account: a server they join is in offline mode. A Forge
+  client takes `localhost` to be `::1`, where a server bound to `127.0.0.1` is
+  not listening: say `127.0.0.1`. And a Forge client cannot log in to a server
+  that runs Fabric API, which asks it something at login it never answers;
+  that is between the loaders, and the connection times out after thirty seconds.
 - The client bridge reads what the client knows. For the truth, ask the
   server — that both can be asked in one scenario is the point.

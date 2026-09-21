@@ -6,12 +6,16 @@
  *   node puppet.js client help                    what the client answers to
  *   node puppet.js client screen                  the open screen as data
  *   node puppet.js client click_widget text=Done  key=value arguments
+ *   node puppet.js client@bot2 player             the client of the game called bot2, of several
  *   node puppet.js server command '{"command":"time set day"}'   or JSON
  *   node puppet.js run scenarios/smoke.json       a scenario; exits 1 if it fails
  *   node puppet.js record out.json                play by hand, Enter to stop: a scenario of what was done
  *   node puppet.js launch client --loader fabric --world my_world
  *                                                 start a dev game, wait for its bridge (and the world)
- *   node puppet.js stop                           quit the client, stop the server
+ *   node puppet.js launch client --name bot1,bot2 --server localhost:25565
+ *                                                 clients of their own, each in runs/<name> under its own
+ *                                                 player's name, joined to a server: "client@bot2" in a scenario
+ *   node puppet.js stop [name ...]                quit the client, stop the server; or only the games named
  *   node puppet.js allow <gameDir>                let this game be driven outside a development
  *                                                 environment (a real launcher's instance); "disallow"
  *                                                 takes it back, "allowed" lists them
@@ -27,6 +31,12 @@
  *   --project <dir>   launch: the mod project with the gradlew (default: here)
  *   --loader <name>   launch: fabric or neoforge (default: fabric)
  *   --world <name>    launch client: open this saved world and wait for it
+ *   --server <addr>   launch client: join this server and wait for the world. localhost:port, as join_server:
+ *                     a server on another machine is reached through a forwarded port (ssh -L)
+ *   --name <a,b,...>  launch client: a game directory of its own for each, runs/<name>, made on first use
+ *   --username <n>    launch client: the player's name (default: the game's name)
+ *   --template <dir>  launch client: what a new runs/<name> is a copy of (default: mods, config and
+ *                     options.txt of the loader's run/)
  *   --timeout <s>     launch: how long a start may take (default: 600)
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
@@ -61,7 +71,8 @@ async function main() {
   let watchLog = true;
   let junit = null;
   let updateGolden = false;
-  const launchOptions = { project: ".", loader: "fabric", world: null, timeout: 600 };
+  const launchOptions = { project: ".", loader: "fabric", world: null, server: null, name: null, username: null,
+    template: null, timeout: 600 };
   const words = [];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === "--dir") dirs.push(argv[++index]);
@@ -73,6 +84,10 @@ async function main() {
     else if (argv[index] === "--project") launchOptions.project = argv[++index];
     else if (argv[index] === "--loader") launchOptions.loader = argv[++index];
     else if (argv[index] === "--world") launchOptions.world = argv[++index];
+    else if (argv[index] === "--server") launchOptions.server = argv[++index];
+    else if (argv[index] === "--name") launchOptions.name = argv[++index];
+    else if (argv[index] === "--username") launchOptions.username = argv[++index];
+    else if (argv[index] === "--template") launchOptions.template = argv[++index];
     else if (argv[index] === "--timeout") launchOptions.timeout = Number(argv[++index]);
     else words.push(argv[index]);
   }
@@ -150,9 +165,9 @@ async function main() {
       return await require("./launch").launch(puppet, rest[0] || "client", launchOptions);
     }
     if (first === "stop") {
-      return await require("./launch").stop(puppet);
+      return await require("./launch").stop(puppet, rest);
     }
-    if (first === "client" || first === "server") {
+    if (/^(client|server)(@.+)?$/.test(first)) {
       const [op, ...argWords] = rest;
       if (!op) throw new Error(`which operation? try: puppet ${first} help`);
       const result = await puppet.call(first, op, parseArgs(argWords));

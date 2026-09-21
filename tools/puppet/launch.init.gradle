@@ -1,0 +1,42 @@
+// What "puppet launch" asks of somebody's mod project, for one run and from outside it:
+// nothing here is written into the project, and a run without this script is as it was.
+//
+//   -Pmc_puppet.run_dir=runs/bot1    the client's game directory, relative to the loader's project
+//   -Pmc_puppet.username=Bot1        the player's name: one game directory, one player
+//
+// Loom's run tasks read their run configuration when they run, so changing it once the
+// project has been evaluated is early enough, and late enough to follow what the project's
+// own build file said: a second --username would stop the game at its command line.
+def asked = gradle.startParameter.projectProperties
+def runDir = asked['mc_puppet.run_dir']
+def username = asked['mc_puppet.username']
+
+allprojects { project ->
+    project.afterEvaluate {
+        def loom = project.extensions.findByName('loom')
+        if (loom == null) {
+            return
+        }
+        loom.runs.all { run ->
+            if (!run.vmArgs.contains('-Dmc_puppet.enabled=true')) {
+                run.vmArg '-Dmc_puppet.enabled=true'
+            }
+            if (run.name != 'client') {
+                return
+            }
+            if (runDir) {
+                run.runDir = runDir
+            }
+            if (username) {
+                def words = new ArrayList<String>(run.programArgs)
+                for (int at = words.indexOf('--username'); at >= 0; at = words.indexOf('--username')) {
+                    words.remove(at)
+                    if (at < words.size()) {
+                        words.remove(at)
+                    }
+                }
+                run.programArguments.set(words + ['--username', username])
+            }
+        }
+    }
+}

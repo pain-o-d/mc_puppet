@@ -13,6 +13,7 @@ import java.util.stream.Stream;
 import com.modrinth.pain_o_d.mc_puppet.core.Args;
 import com.modrinth.pain_o_d.mc_puppet.core.GameJson;
 import com.modrinth.pain_o_d.mc_puppet.core.Ops;
+import com.modrinth.pain_o_d.mc_puppet.core.Reach;
 import com.modrinth.pain_o_d.mc_puppet.core.Waiter;
 import com.modrinth.pain_o_d.mc_puppet.mixin.HandledScreenAccessor;
 import com.modrinth.pain_o_d.mc_puppet.mixin.MerchantScreenAccessor;
@@ -28,6 +29,7 @@ import dev.architectury.platform.Platform;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.ParentElement;
+import net.minecraft.client.gui.screen.DisconnectedScreen;
 import net.minecraft.client.gui.screen.MessageScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
@@ -40,6 +42,7 @@ import net.minecraft.client.gui.widget.CyclingButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
 import net.minecraft.entity.Entity;
@@ -295,6 +298,11 @@ public final class ClientOps {
             return JsonNull.INSTANCE;
         });
 
+        ops.now("join_server", "{address: localhost[:port]}",
+                "Joins a server on this machine, or one whose port was brought here (ssh -L). Follow with "
+                        + "wait {for: world}, which says why if the server turns the player away.",
+                args -> joinServer(client, args));
+
         ops.now("leave_world", "{}", "Saves and leaves to the title screen. Follow with wait {for: no_world}.",
                 args -> {
                     if (client.world == null) {
@@ -367,6 +375,7 @@ public final class ClientOps {
         info.addProperty("development", com.modrinth.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", net.minecraft.SharedConstants.getGameVersion().getName());
         info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : com.modrinth.pain_o_d.mc_puppet.compat.Compat.OTHER_LOADER);
+        info.addProperty("username", client.getSession().getUsername());
         info.addProperty("in_world", client.world != null && client.player != null);
         info.addProperty("singleplayer", client.isInSingleplayer());
         // True on a server that is not on this machine, where nearly everything is refused: see core/Reach.
@@ -799,6 +808,32 @@ public final class ClientOps {
         return json;
     }
 
+    /**
+     * To a server on this machine and to no other. Anywhere else the bridge would go deaf the
+     * moment the player arrived (see {@link Reach}), and a program that can send a player's game
+     * and account to an address of its choosing is nothing a test needs.
+     */
+    private static JsonElement joinServer(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        String address = Args.string(args, "address").trim();
+        if (!ServerAddress.isValid(address)) {
+            throw new Ops.Refused("\"" + address + "\" is not an address; localhost:25565 is one");
+        }
+        ServerAddress parsed = ServerAddress.parse(address);
+        String refused = Reach.refusalToJoin(parsed.getAddress());
+        if (refused != null) {
+            throw new Ops.Refused(refused);
+        }
+        requireLoaded(client);
+        if (client.world != null) {
+            throw new Ops.Refused("a world is loaded; leave_world first");
+        }
+        com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.joinServer(client, parsed, address);
+        JsonObject json = new JsonObject();
+        json.addProperty("host", parsed.getAddress());
+        json.addProperty("port", parsed.getPort());
+        return json;
+    }
+
     private static JsonElement window(MinecraftClient client, JsonObject args) throws Ops.Refused {
         if (args.has("width") || args.has("height")) {
             client.getWindow().setWindowedSize(
@@ -833,9 +868,15 @@ public final class ClientOps {
                         () -> client.currentScreen == null ? new JsonPrimitive(true) : null);
             case "world":
                 // Playable: a player in a world, and no loading screen over it.
-                return waiter.until("a world to be playable", timeout,
-                        () -> client.world != null && client.player != null && client.currentScreen == null
-                                ? new JsonPrimitive(client.player.getGameProfile().getName()) : null);
+                return waiter.until("a world to be playable", timeout, () -> {
+                    // A server that said no has said why, and no amount of waiting turns that into a world.
+                    if (client.world == null && client.currentScreen instanceof DisconnectedScreen turnedAway) {
+                        throw new java.util.concurrent.CompletionException(new Ops.Refused(
+                                "there will be no world: " + turnedAway.getNarratedTitle().getString()));
+                    }
+                    return client.world != null && client.player != null && client.currentScreen == null
+                            ? new JsonPrimitive(client.player.getGameProfile().getName()) : null;
+                });
             case "loaded":
                 // After a resource reload (F3+T, a resource pack), until the splash is gone.
                 return waiter.until("the game to finish loading its resources", timeout,

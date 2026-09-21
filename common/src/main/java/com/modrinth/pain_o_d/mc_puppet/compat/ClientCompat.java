@@ -8,6 +8,9 @@ import java.util.function.Function;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.client.gui.screen.multiplayer.ConnectScreen;
+import net.minecraft.client.network.ServerAddress;
+import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.scoreboard.Scoreboard;
@@ -38,6 +41,12 @@ public final class ClientCompat {
     public static void createWorld(MinecraftClient client, String name, LevelInfo level, GeneratorOptions generator,
                                    Function<DynamicRegistryManager, DimensionOptionsRegistryHolder> dimensions) {
         client.createIntegratedServerLoader().createAndStart(name, level, generator, dimensions, client.currentScreen);
+    }
+
+    /** Straight to the connecting screen, as the server list's Join button goes; back from a refusal is the title. */
+    public static void joinServer(MinecraftClient client, ServerAddress address, String asTyped) {
+        ConnectScreen.connect(new TitleScreen(), client, address,
+                new ServerInfo("MC Puppet", asTyped, ServerInfo.ServerType.OTHER), false, null);
     }
 
     /** Every sound the client plays, as it plays it. */

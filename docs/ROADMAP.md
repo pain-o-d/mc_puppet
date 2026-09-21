@@ -83,8 +83,12 @@ after it rests on it.
 - [x] **An API for mods**: a mod registers operations of its own, so a test
       reads its state as data instead of parsing what a command printed.
       Unit-tested; **no mod has used it in a running game yet.**
-- [x] **More than one game**: two clients in one scenario, by name.
-      Unit-tested; **two games have not been run side by side yet.**
+- [x] **More than one game**: two clients in one scenario, by name. Run live on
+      2026-09-22, once clients could be made to join a server: `join_server`,
+      and `launch client --name a,b,c --server …` for as many as a test needs,
+      four at once against a server on another machine. The first live run
+      found that `launch` had never written its log on Windows, and that
+      `stop` asked one client to quit N times.
 - [x] **JUnit XML** from the runner, for CI.
 - [x] **Golden screenshots**: compare with a kept image within a tolerance,
       so layout regressions are caught without anyone looking. Unit-tested
@@ -161,8 +165,13 @@ after it rests on it.
 
 - A server that has MC Puppet on could say so to a client that has it too, and
   the client's bridge could then work there: a test server on another machine,
-  with its owner's word for it. Until something needs that, "this machine and
-  no further" is the whole rule, and it needs no packets.
+  with its owner's word for it. Something did need a test server on another
+  machine (2026-09-22), and a forwarded port was enough: `ssh -L` makes it a
+  server on localhost, with ssh's word for whose it is. "This machine and no
+  further" is still the whole rule, and it still needs no packets.
+- The server's bridge of such a machine is out of reach: its token is a file
+  over there. A scenario's server steps run there or not at all; RCON through
+  the same tunnel does for now.
 
 ## What 1.0.0 waits for
 

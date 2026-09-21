@@ -63,6 +63,28 @@ function setAllowed(gameDir, allow, home) {
 /** Where a game directory usually is, relative to a mod project's root. */
 const USUAL_DIRS = [".", "run", "fabric/run", "neoforge/run", "forge/run", "common/run"];
 
+/**
+ * Where "launch --name" keeps the games it makes: runs/<name> beside the loader's own run/. The
+ * folder's name is the game's, so a scenario says "client@bot2" with nothing more to configure.
+ */
+const RUNS_UNDER = [".", "fabric", "neoforge", "forge"];
+
+/** Every place under a root where a game may be, with the name it goes by. */
+function placesUnder(root, game) {
+  const places = USUAL_DIRS.map((usual) => ({ dir: path.resolve(root, usual), game }));
+  for (const under of RUNS_UNDER) {
+    const runs = path.resolve(root, under, "runs");
+    let names;
+    try {
+      names = fs.readdirSync(runs);
+    } catch (absent) {
+      continue;
+    }
+    for (const name of names) places.push({ dir: path.join(runs, name), game: name });
+  }
+  return places;
+}
+
 function pidAlive(pid) {
   if (!pid) return true;
   try {
@@ -82,7 +104,8 @@ function pidAlive(pid) {
  *   and then to the current directory
  *   A directory may be given a name, "second=E:/games/two": a scenario then
  *   says "client@second". One game directory per game: two games in one
- *   would write the same endpoint file, and the same log.
+ *   would write the same endpoint file, and the same log. A game under
+ *   runs/<name> is called by its folder's name.
  * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string, game?: string}[]}
  */
 function discover(dirs) {
@@ -91,8 +114,7 @@ function discover(dirs) {
   const found = [];
   const seen = new Set();
   for (const { game, root } of roots) {
-    for (const usual of USUAL_DIRS) {
-      const dir = path.resolve(root, usual);
+    for (const { dir, game: called } of placesUnder(root, game)) {
       const folder = path.join(dir, "mc_puppet");
       let names;
       try {
@@ -108,7 +130,7 @@ function discover(dirs) {
         try {
           const endpoint = JSON.parse(fs.readFileSync(file, "utf8"));
           // A game that was killed leaves its file behind. The pid says so.
-          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(game ? { game } : {}) });
+          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(called ? { game: called } : {}) });
         } catch (unreadable) {
           // Half-written as the game starts; the next look finds it whole.
         }
@@ -262,4 +284,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };
+module.exports = { discover, sameDir, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };
