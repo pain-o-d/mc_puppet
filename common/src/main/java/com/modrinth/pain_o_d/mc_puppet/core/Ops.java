@@ -57,6 +57,18 @@ public final class Ops {
     private final Waiter waiter;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
 
+    /** Told of what runs inside another operation, which whoever asked for the outer one never named aloud. */
+    public interface Inner {
+        void ran(String within, String op, JsonObject args, Throwable failure, long millis);
+    }
+
+    private volatile Inner inner = (within, op, args, failure, millis) -> { };
+
+    /** For the audit: a batch's steps and what a wait_until polls, each as it is run. */
+    public void tellOfInner(Inner listener) {
+        this.inner = listener;
+    }
+
     /**
      * @param side       "client" or "server", for {@code help}
      * @param gameThread runs a task on the thread the game's state belongs to
@@ -149,6 +161,8 @@ public final class Ops {
         }
         JsonObject opArgs = args.has("args") && args.get("args").isJsonObject()
                 ? args.getAsJsonObject("args") : new JsonObject();
+        // Once, not once a tick: what is polled is the same every time.
+        inner.ran("wait_until", name, opArgs, null, 0);
         String path = Args.string(args, "path", "");
         String[] lastProblem = {"nothing yet"};
         return waiter.until(() -> name + " to meet the expectation; last: " + lastProblem[0],
@@ -229,7 +243,9 @@ public final class Ops {
         JsonObject step = steps.get(index);
         JsonObject stepArgs = step.has("args") && step.get("args").isJsonObject()
                 ? step.getAsJsonObject("args") : new JsonObject();
+        long asked = System.currentTimeMillis();
         run(step.get("op").getAsString(), stepArgs).whenComplete((result, failure) -> {
+            inner.ran("batch", step.get("op").getAsString(), stepArgs, failure, System.currentTimeMillis() - asked);
             JsonObject outcome = new JsonObject();
             outcome.addProperty("op", step.get("op").getAsString());
             outcome.addProperty("ok", failure == null);

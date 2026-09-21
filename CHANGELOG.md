@@ -38,6 +38,8 @@ Forge), from one set of sources. Needs Architectury API.
   `mc-puppet allow <gameDir>`, one directory at a time. A modpack ships its
   config folder; it cannot ship that.
 - An audit log of what was asked, and a protocol version the tools check.
+- Reviewed before release by somebody other than its author, told to be hostile;
+  what that found is fixed and listed in `docs/ROADMAP.md`.
 
 **Seen working**, not only compiled: the scenarios on all four targets in
 development environments, and the built jar in a real NeoForge server

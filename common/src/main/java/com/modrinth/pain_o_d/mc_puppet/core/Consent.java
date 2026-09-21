@@ -28,6 +28,24 @@ import com.google.gson.JsonParseException;
  * tool does, when asked: {@code mc-puppet allow <gameDir>}. One directory at a
  * time and no wildcard, so that allowing one instance is not allowing the
  * next pack that happens to carry the mod.
+ *
+ * <p>A review before the first release found three ways a pack could still
+ * have answered for the player, and each is refused here by name:
+ * <ul>
+ * <li>an entry that is not an absolute path. {@code "."} is wherever the game
+ *     was started, which is the game directory in every launcher, so it named
+ *     every victim's instance without knowing any of them;</li>
+ * <li>a consent file that is itself inside the game directory, which happens
+ *     when the home directory <em>is</em> the game directory - a server in a
+ *     container whose home is its root, a pack unpacked into {@code ~} - and
+ *     then the file is one a pack ships;</li>
+ * <li>a home that is not an absolute path, which is what a shipped
+ *     {@code -Duser.home=config/x} makes of it.</li>
+ * </ul>
+ * None of this stands against a pack that can set JVM arguments or carries a
+ * mod of its own: that is code running as the player already, and it needs no
+ * bridge. What is kept out is files - a config folder, a home folder - arriving
+ * with a download.
  */
 public final class Consent {
 
@@ -45,20 +63,41 @@ public final class Consent {
 
     /** Whether {@code gameDir} is named in the consent file under {@code home}. Unreadable is no. */
     public static boolean given(Path home, Path gameDir) {
-        Path file = fileIn(home);
-        if (!Files.isRegularFile(file)) {
-            return false;
+        return refusal(home, gameDir) == null;
+    }
+
+    /** Why consent is not given, for the log, or {@code null} if it is. */
+    public static String refusal(Path home, Path gameDir) {
+        if (!home.isAbsolute()) {
+            return "the home directory is given as \"" + home + "\", which is not an absolute path";
         }
+        Path file = fileIn(home);
+        String game = key(gameDir);
+        String consent = key(file);
+        if (consent.equals(game) || consent.startsWith(game.endsWith("/") ? game : game + "/")) {
+            return file + " is inside the game directory, where anything downloaded can put it";
+        }
+        if (!Files.isRegularFile(file)) {
+            return "there is no " + file;
+        }
+        return named(file, game) ? null : file + " does not name this game directory";
+    }
+
+    private static boolean named(Path file, String wanted) {
         try {
             JsonObject read = Protocol.GSON.fromJson(Files.readString(file, StandardCharsets.UTF_8),
                     JsonObject.class);
             if (read == null || !read.has("allowed") || !read.get("allowed").isJsonArray()) {
                 return false;
             }
-            String wanted = key(gameDir);
             JsonArray allowed = read.getAsJsonArray("allowed");
             for (JsonElement each : allowed) {
-                if (each.isJsonPrimitive() && key(Path.of(each.getAsString())).equals(wanted)) {
+                if (!each.isJsonPrimitive()) {
+                    continue;
+                }
+                Path entry = Path.of(each.getAsString());
+                // Absolute or nothing: "." would be every game that was ever started from its own folder.
+                if (entry.isAbsolute() && key(entry).equals(wanted)) {
                     return true;
                 }
             }

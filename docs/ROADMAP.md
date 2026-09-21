@@ -109,8 +109,34 @@ after it rests on it.
 - [x] **The protocol has a version**, in the endpoint file and in `info`, and
       the tools name which side to update when they differ.
 - [x] The token's file is its owner's alone where that can be said.
-- [ ] A review of `Bridge`, `Consent` and `Audit` by somebody other than
-      their author (`/code-review`).
+- [x] **A review of the safety story by somebody other than its author**, on
+      2026-09-21: an agent with no part in writing it, read-only, told to be
+      hostile. The network side held - loopback only, nothing runs before a
+      256-bit token is accepted, a remote attacker has no way in and a page
+      in a browser gets no further than the token. Four things did not hold
+      as written, and are fixed, each with a test that fails on the old code:
+  - *Consent could be answered from inside the game directory*: an entry of
+    `"."`, a home directory that is the game directory (a container), a
+    shipped `-Duser.home`. Absolute entries only now, and a consent file
+    inside the game directory counts for nothing.
+  - *On Fabric a JVM argument made a player's game a development
+    environment*, which needs no consent. The game is looked at as well as
+    asked: a real one runs in intermediary names.
+  - *The audit log could be lied to*: a step hidden in a `batch` behind
+    padding, a line break in an operation's name writing lines of its own, a
+    file that only turned over at startup.
+  - *A scenario's golden could be written anywhere*, and with
+    `--update-golden` over anything. A `.png` under the scenario's folder now.
+
+      Smaller: a connection that proves nothing is dropped after ten seconds
+      and at its first line that is not the protocol; a wrong token is a line
+      in the log; the token's file is closed to others from the moment it
+      exists; world names cannot walk out of `saves/`; `prod-check` takes its
+      consent back on Ctrl+C. `tools/attack-check.js` tries nineteen of these
+      against a running game. **What the review could not settle, and nobody
+      has tried**: whether a real Fabric game starts at all with
+      `-Dfabric.development=true`; which launchers let a pack set JVM
+      arguments; the actions in the workflow are pinned by tag, not by hash.
 - [x] **The built jar in a real server**, outside any development environment
       (`node tools/prod-check.js --eula`): with a config that says on and no
       consent it stays off and says what to run; allowed, it opens on

@@ -342,6 +342,12 @@ async function attempt(puppet, side, step, saved, entry, options = {}) {
  *
  * A golden holds for one window size, GUI scale and language. Set the window
  * in setup, and compare a region when the world shows behind the screen.
+ *
+ * A scenario is a file somebody downloaded, and "file" is the one place in it
+ * that names where to write. So it names a .png under the scenario's own
+ * folder or it names nothing: "../../.ssh/authorized_keys" with --update-golden
+ * was a file overwritten, and an absolute path into a Startup folder a file
+ * planted, before the review that found this.
  */
 function compareGolden(golden, result, options, entry) {
   const fs = options.fs || require("fs");
@@ -349,7 +355,18 @@ function compareGolden(golden, result, options, entry) {
   const png = require("./png");
   const taken = result && result.path;
   if (!taken) return "\"golden\" is for a step that answers with a \"path\", as screenshot does";
-  const kept = path.resolve(options.baseDir || ".", golden.file);
+  const base = path.resolve(options.baseDir || ".");
+  if (typeof golden.file !== "string" || !/\.png$/i.test(golden.file)) {
+    return "\"golden\" needs a \"file\" ending in .png";
+  }
+  const kept = path.resolve(base, golden.file);
+  const within = path.relative(base, kept);
+  if (!within || within.startsWith("..") || path.isAbsolute(within)) {
+    return `the golden "${golden.file}" is not under the scenario's own folder, and nothing is written or read outside it`;
+  }
+  if (typeof taken !== "string" || !/\.png$/i.test(taken)) {
+    return "the step's \"path\" is not a .png, so there is nothing to keep as a golden";
+  }
   if (options.updateGolden || !fs.existsSync(kept)) {
     fs.mkdirSync(path.dirname(kept), { recursive: true });
     fs.copyFileSync(taken, kept);

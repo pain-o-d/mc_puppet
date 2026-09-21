@@ -31,7 +31,8 @@ Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) · needs 
 This is remote control of a game, and it is built to be refused.
 
 - **Off by default.** Dropping the jar into a mods folder does nothing but log
-  one line. It is switched on by `"enabled": true` in `config/mc_puppet.json`
+  one line and write a `config/mc_puppet.json` that says `"enabled": false`.
+  It is switched on by `"enabled": true` in `config/mc_puppet.json`
   or by `-Dmc_puppet.enabled=true`.
 - **Loopback only.** It binds `127.0.0.1`. There is no setting that makes it
   listen to a network.
@@ -39,8 +40,17 @@ This is remote control of a game, and it is built to be refused.
   at startup and written to `<gameDir>/mc_puppet/endpoint-<side>.json`.
   Reaching the port is not enough; a caller has to be able to read the game's
   own files — and whoever can do that could already edit the world.
-- **A wrong token ends the connection.** Where the file system can say so, the
-  file holding it is readable by its owner alone.
+- **A wrong token ends the connection**, and is worth a line in the log. So
+  does anything that is not this protocol, before a token has been shown: a
+  page in a browser can reach a port on localhost, and gets no further than
+  that. A connection that proves nothing in ten seconds is dropped.
+- **The token's file is its owner's alone where the file system can say so**:
+  on Linux and macOS the `mc_puppet/` folder and the file are closed to other
+  accounts from the moment they exist. **Windows cannot be told that way**, and
+  the file is as readable as the folder the game is in: yours alone under your
+  user profile, anybody's with an account on the machine in a folder like
+  `D:\Games`. On a machine other people use, keep the game under your profile
+  or leave the bridge off.
 - **Outside a development environment the switch is not enough.** A modpack
   ships its `config/` folder, so a developer who tests with MC Puppet and then
   exports the instance ships `"enabled": true` to every player of it — and a
@@ -49,9 +59,27 @@ This is remote control of a game, and it is built to be refused.
   where a pack cannot put it**: `~/.mc_puppet/allowed.json`, naming that game
   directory. `mc-puppet allow <gameDir>` writes it, one directory at a time,
   no wildcard; `disallow` takes it back. Without it the mod logs why it
-  stayed off and what to run.
+  stayed off and what to run. Consent that a pack could have brought with it
+  is refused by name: an entry that is not an absolute path (`"."` would be
+  every game started from its own folder), a consent file that is itself
+  inside the game directory (a server whose home *is* its root), a home that
+  is not an absolute path. On Fabric, where the loader calls a game a
+  development environment because a system property says so, the game is
+  looked at too: a real one runs in intermediary names, and is not believed.
+  **What this does not stand against** is a pack that can set JVM arguments or
+  carries a mod of its own. That is code running as the player already, and it
+  needs no bridge. What is kept out is *files* arriving with a download.
 - **When it is on outside development, the player is told** in chat on joining
   a world, every time. A log is not somewhere a player looks.
+- **Everything asked is written down**, in `mc_puppet/audit-<side>.log`:
+  each request, each step inside a `batch`, what a `wait_until` polls. The
+  one written about supplies the words, so a name cannot break a line and
+  padding cannot push an argument out of sight.
+- **A scenario is a program for your game.** It can run any command at level 4
+  in whatever game it is pointed at, so read one before you run it, as you
+  would a shell script. What it cannot do is reach your machine: its sums are
+  read by a parser and never evaluated, and the one thing it names to write, a
+  golden screenshot, has to be a `.png` under the scenario's own folder.
 - On a server it runs commands at operator level 4. Do not enable it on a
   server whose machine you share with people you would not give the console.
 
@@ -356,7 +384,7 @@ One JSON object a line, both ways, over TCP on `127.0.0.1`:
 <- {"id": 7, "ok": false, "error": "no screen is open"}
 ```
 
-The endpoint file says where: `{side, host, port, token, pid, started}`.
+The endpoint file says where: `{side, host, port, token, pid, started, protocol}`.
 Default ports are 25580 (client) and 25581 (server); if one is taken the next
 free one is used and the file says which. Requests may overlap; match answers
 by `id`. Ten lines of any language are enough — `tools/puppet/lib.js` is the

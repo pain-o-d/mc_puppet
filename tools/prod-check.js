@@ -106,6 +106,8 @@ function run(name, then) {
     const args = process.platform === "win32" ? "win_args.txt" : "unix_args.txt";
     const child = spawn(java, ["-Xmx2G", `@libraries/net/neoforged/neoforge/${NEOFORGE}/${args}`, "nogui"],
       { cwd: dir, stdio: ["pipe", "pipe", "pipe"] });
+    running = child;
+    child.once("exit", () => { running = null; });
     let log = "";
     let asked = false;
     let stoppedAt = 0;
@@ -141,6 +143,18 @@ function puppet(...words) {
   const out = spawnSync(process.execPath, [path.join(__dirname, "puppet", "puppet.js"), "--dir", dir, ...words],
     { encoding: "utf8" });
   return { status: out.status, text: ((out.stdout || "") + (out.stderr || "")).trim() };
+}
+
+// Consent is written to the real home directory, which is the thing being tried. A finally
+// does not run for Ctrl+C, and consent left behind is a game directory that stays drivable.
+let running = null;
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    try { lib.setAllowed(dir, false); } catch (unwritable) { /* said below */ }
+    if (running) running.kill();
+    console.error(`\n${signal}: consent for ${dir} taken back, the server told to go`);
+    process.exit(130);
+  });
 }
 
 const checks = [];

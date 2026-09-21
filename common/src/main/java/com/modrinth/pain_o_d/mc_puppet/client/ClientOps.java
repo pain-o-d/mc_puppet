@@ -284,7 +284,7 @@ public final class ClientOps {
 
         ops.now("open_world", "{name}", "Starts a saved world. Follow with wait {for: world}.", args -> {
             requireLoaded(client);
-            String name = Args.string(args, "name");
+            String name = worldName(args);
             if (!Files.isDirectory(client.getLevelStorage().getSavesDirectory().resolve(name))) {
                 throw new Ops.Refused("no saved world in a folder called " + name);
             }
@@ -747,12 +747,32 @@ public final class ClientOps {
         }
     }
 
+    /**
+     * A world's name is a folder's name under saves/, and whoever is connected chose it. One
+     * folder, by name: nothing that walks out of saves/ or means something to a file system.
+     * Any language's letters are fine; people call their worlds what they like.
+     */
+    static String worldName(JsonObject args) throws Ops.Refused {
+        String name = Args.string(args, "name");
+        boolean walks = name.isBlank() || name.equals(".") || name.contains("..") || name.endsWith(".")
+                || name.endsWith(" ") || name.startsWith(" ");
+        for (int index = 0; index < name.length() && !walks; index++) {
+            char letter = name.charAt(index);
+            walks = Character.isISOControl(letter) || "/\\:*?\"<>|".indexOf(letter) >= 0;
+        }
+        if (walks || name.length() > 100) {
+            throw new Ops.Refused("a world's name is one folder's name under saves/: no slashes, no \"..\", "
+                    + "none of : * ? \" < > |, and no more than a hundred characters");
+        }
+        return name;
+    }
+
     private static JsonElement createWorld(MinecraftClient client, JsonObject args) throws Ops.Refused {
         requireLoaded(client);
         if (client.world != null) {
             throw new Ops.Refused("a world is loaded; leave_world first");
         }
-        String name = Args.string(args, "name");
+        String name = worldName(args);
         if (Files.exists(client.getLevelStorage().getSavesDirectory().resolve(name))) {
             throw new Ops.Refused("a world folder called " + name + " exists; open_world it, or pick another name");
         }
