@@ -32,6 +32,7 @@ Base package `com.modrinth.pain_o_d.mc_puppet`, mod id `mc_puppet`.
 node --test tools/puppet/scenario.test.js
 ./gradlew :fabric:runClient        # bridge on, player "Puppet", window opens
 ./gradlew :fabric:runServer        # dedicated; eula and offline mode live in fabric/run/
+node tools/puppet/puppet.js --dir . launch client --name bot1,bot2 --server localhost:25565   # fabric/runs/<name>, client@bot1
 tools/stop-dev-server.sh           # clear orphaned dev JVMs of this project
 
 P="node tools/puppet/puppet.js --dir ."
@@ -80,6 +81,12 @@ else it is off until told otherwise. Never change that default.
 - **The game describes itself.** A new operation is one `ops.now(name, args,
   does, …)`; `help` and the MCP server pick it up. Keep `args` and `does`
   accurate — they are the documentation.
+- **`join_server` goes to a loopback address and nowhere else**, by the same
+  rule as `Reach` and for the same reason. A remote test server is a forwarded
+  port. Do not add a way round it; there is no need for one.
+- **`launch` never edits the project it starts.** What a named client needs —
+  its run directory, its player's name, the bridge switched on — goes through
+  `tools/puppet/launch.init.gradle`. It is in the npm package's `files`.
 - **Entities: only the living.** A mob killed this tick is in the world for
   another second. The first live scenario failed on exactly that.
 - **Test against a game, not just compile.** The scenario in `scenarios/` is
@@ -93,8 +100,10 @@ dedicated server (no client class loaded). Since then, and by 2026-09-21: the
 scenarios on all four targets (1.21.1 Fabric and NeoForge, 1.20.1 Fabric and
 Forge) in development environments; the built jar in a real NeoForge 1.21.1
 server (`tools/prod-check.js`); the live bridge attacked
-(`tools/attack-check.js`). **Not tried:** the other three jars outside a
-development environment, and a real client from a launcher.
+(`tools/attack-check.js`). And on 2026-09-22 `join_server` and named clients on all four: 1.21.1
+against a real Fabric server on another machine through `ssh -L` (four clients
+at once), 1.20.1 against dev servers here. **Not tried:** the other three jars
+outside a development environment, and a real client from a launcher.
 
 **Published**: 0.1.2, a beta, on npm (`mc-puppet`), on GitHub
 (`pain-o-d/mc_puppet`, public) and submitted to Modrinth (`mc-puppet`).

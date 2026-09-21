@@ -33,6 +33,7 @@
     "lib.js",
     "scenario.js",
     "launch.js",
+    "launch.init.gradle",
     "junit.js",
     "png.js",
     "README.md",

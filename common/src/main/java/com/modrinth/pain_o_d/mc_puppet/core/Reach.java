@@ -1,7 +1,10 @@
 package com.modrinth.pain_o_d.mc_puppet.core;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.UnknownHostException;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -53,6 +56,46 @@ public final class Reach {
         // Unresolved has no address to ask, and is not taken on trust.
         return address instanceof InetSocketAddress socket && socket.getAddress() != null
                 && socket.getAddress().isLoopbackAddress();
+    }
+
+    /**
+     * Whether a host, as somebody typed it, names this machine: {@code localhost}, or a loopback
+     * address written out. No other name is looked up. That would be a question to DNS from the
+     * game's thread, and what a name answers today it need not answer tomorrow; the connection
+     * that results is judged by {@link #isThisMachine} whatever was typed.
+     */
+    public static boolean namesThisMachine(String host) {
+        if (host == null) {
+            return false;
+        }
+        String name = host.trim().toLowerCase(Locale.ROOT);
+        if (name.startsWith("[") && name.endsWith("]")) {
+            name = name.substring(1, name.length() - 1);
+        }
+        if (name.equals("localhost")) {
+            return true;
+        }
+        // Only what is already an address: digits and dots, or anything with a colon, which
+        // Java reads as an IPv6 literal or refuses, and never looks up.
+        if (!name.matches("[0-9.]+") && name.indexOf(':') < 0) {
+            return false;
+        }
+        try {
+            return InetAddress.getByName(name).isLoopbackAddress();
+        } catch (UnknownHostException | SecurityException notAnAddress) {
+            return false;
+        }
+    }
+
+    /** Why a client is not sent to {@code host}, or {@code null} if it is on this machine. */
+    public static String refusalToJoin(String host) {
+        if (namesThisMachine(host)) {
+            return null;
+        }
+        return "join_server goes to a server on this machine: localhost or 127.0.0.1, with its port. \"" + host
+                + "\" is somewhere else, where MC Puppet would neither drive nor read the game. For a test server "
+                + "on another machine of yours, bring its port here first (ssh -L 25565:localhost:25565 that-machine) "
+                + "and join localhost:25565.";
     }
 
     /** Why {@code op} is refused on a server that is elsewhere, or {@code null} if it is not. */

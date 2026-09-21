@@ -5,6 +5,28 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- **Clients that join a server, and as many of them as a test needs.**
+  `join_server {address}` connects a client, and `wait {for: world}` after it
+  ends at once with the server's words if the player is turned away, instead of
+  timing out. It goes to `localhost` or a loopback address only: anywhere else
+  the bridge is deaf by design, and a test server on another machine is reached
+  through a forwarded port (`ssh -L`), which the refusal says.
+  `launch client --name bot1,bot2,bot3 --server localhost:25565` starts clients
+  of one project side by side, each in `<loader>/runs/<name>` made from the
+  project's own `run/` (or `--template`), each under its own player's name
+  (`--username`), without touching the project's build file, and each is
+  `client@<name>` to a scenario and to the command line with no `--dir`.
+  `stop` takes names. Seen on all four targets, 1.21.1 against a real server on
+  another machine; `scenarios/two-clients-one-server.json` is the worked example,
+  and the first time two games ran in one scenario.
+- `info` says the player's `username`, and `entities` gives a player's `name`.
+- `launch` on Windows writes the log it points at. Started detached through
+  `cmd`, Gradle's output was lost and the file was always empty, so a launch
+  that failed said "see the log" about nothing. The wrapper's jar is now run by
+  Java directly.
+- `stop` asks each game by its own connection. With several clients up it asked
+  the newest one as many times as there were clients.
+
 - The `-sources.jar` of each build holds the sources of what is in the jar. Those of
   0.1.1 and 0.1.2 held one file of forty-four, the loader's entry point: the
   common module, which is where the bridge is, was left out. Read the code in the

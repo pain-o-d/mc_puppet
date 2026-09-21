@@ -24,6 +24,7 @@ npx mc-puppet client click_widget text=Done
 npx mc-puppet server command '{"command":"time set day"}'
 npx mc-puppet run scenarios/trade.json --junit results.xml
 npx mc-puppet launch client --loader fabric --world my_world   # a dev game through your Gradle wrapper
+npx mc-puppet launch client --name bot1,bot2 --server localhost:25565   # clients of their own, on a server
 npx mc-puppet stop
 ```
 

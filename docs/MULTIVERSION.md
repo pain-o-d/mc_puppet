@@ -84,6 +84,7 @@ around them.
 | `Compat.OTHER_LOADER` | forge | neoforge |
 | `ClientCompat.updateCrosshair` | `updateTargetedEntity` | `updateCrosshairTarget` |
 | `ClientCompat.openWorld` / `createWorld` | a parent screen first; no parent | a cancel callback; a parent |
+| `ClientCompat.joinServer` | `gui.screen.ConnectScreen`, a `ServerInfo` that is or is not local | `gui.screen.multiplayer`, a server type, and a cookie store to pass |
 | `ClientCompat.onSound` | two arguments | three |
 | `ClientCompat.sidebarOf` / `linesOf` | slot 1, `ScoreboardPlayerScore` | an enum, `ScoreboardEntry` |
 

@@ -7,6 +7,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ConnectScreen;
+import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.client.network.ServerAddress;
+import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.scoreboard.Scoreboard;
@@ -38,6 +42,10 @@ public final class ClientCompat {
     public static void createWorld(MinecraftClient client, String name, LevelInfo level, GeneratorOptions generator,
                                    Function<DynamicRegistryManager, DimensionOptionsRegistryHolder> dimensions) {
         client.createIntegratedServerLoader().createAndStart(name, level, generator, dimensions);
+    }
+
+    public static void joinServer(MinecraftClient client, ServerAddress address, String asTyped) {
+        ConnectScreen.connect(new TitleScreen(), client, address, new ServerInfo("MC Puppet", asTyped, false), false);
     }
 
     public static void onSound(MinecraftClient client, Consumer<SoundInstance> heard) {
