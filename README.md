@@ -137,7 +137,7 @@ instead, and Loom remaps it:
 ```groovy
 dependencies {
     // In a dev run only: never in your jar, never in your published dependencies.
-    modLocalRuntime "maven.modrinth:mc-puppet:<version>"
+    modLocalRuntime "maven.modrinth:mc-puppet:0.1.1+mc1.20.1-forge"   // or +mc1.21.1-neoforge
 }
 ```
 
