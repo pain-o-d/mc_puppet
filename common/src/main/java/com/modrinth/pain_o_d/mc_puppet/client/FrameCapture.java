@@ -84,6 +84,7 @@ public final class FrameCapture {
     // ---- called from the mixins -----------------------------------------------------
 
     public static void frameBegins() {
+        FrameClock.frame();
         if (wanted != null && recording == null) {
             recording = new Frame();
             active = true;

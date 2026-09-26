@@ -117,6 +117,55 @@ public final class ClientOps {
         ops.now("entities", "{type?, radius?: 16, limit?: 20}", "Entities near the player, nearest first.",
                 args -> entities(client, args));
 
+        ops.add("watch", "{type?, radius?: 32, ticks?: 100, jump?: 1.0, turn?: 45, drawn_only?: true, ai?: true|false}",
+                "Watches the entities near the player every tick for so many ticks (at most 1200) and says how they "
+                        + "moved: appeared, disappeared, blinks (lived five ticks or fewer), the largest step a tick and "
+                        + "jumps (steps over \"jump\" blocks), the sharpest turn and turns over \"turn\" degrees, those "
+                        + "moving with still legs (sliding, sliding_share), floating (held up over air), buried (inside "
+                        + "a block), overlaps (pairs closer than their width), and the worst of each with where and when. "
+                        + "What a screenshot shows one frame of, as numbers a test can hold. With \"drawn_only\" (the "
+                        + "default) only what the renderer would draw counts - a mod may hide an entity behind a stand-in. "
+                        + "Adds the frames while it watched: fps, frame_ms_mean, frame_ms_p95, frame_ms_max, stalls_over_50ms. "
+                        + "\"ai\": false watches only mobs with no brain (a mod's placed bodies and pictures), true only the rest.",
+                args -> {
+                    requirePlayer(client);
+                    String type = Args.string(args, "type", null);
+                    double radius = args.has("radius") ? Args.decimal(args, "radius") : 32;
+                    boolean drawnOnly = Args.flag(args, "drawn_only", true);
+                    net.minecraft.client.render.Frustum everywhere = new net.minecraft.client.render.Frustum(new org.joml.Matrix4f(), new org.joml.Matrix4f()) {
+                        @Override
+                        public boolean isVisible(net.minecraft.util.math.Box box) {
+                            return true;   // what the renderer would draw anywhere round the player, not only in view
+                        }
+                    };
+                    com.modrinth.pain_o_d.mc_puppet.core.Watch watch = new com.modrinth.pain_o_d.mc_puppet.core.Watch(() -> {
+                        java.util.List<net.minecraft.entity.Entity> found = new java.util.ArrayList<>();
+                        if (client.world == null || client.player == null) {
+                            return found;
+                        }
+                        for (net.minecraft.entity.Entity entity : client.world.getEntities()) {
+                            if (entity != client.player && com.modrinth.pain_o_d.mc_puppet.core.Watch.ofType(entity, type)
+                                    && com.modrinth.pain_o_d.mc_puppet.core.Watch.ofAi(entity, args)
+                                    && entity.squaredDistanceTo(client.player) <= radius * radius) {
+                                net.minecraft.util.math.Vec3d eye = client.gameRenderer.getCamera().getPos();
+                                if (!drawnOnly || client.getEntityRenderDispatcher().shouldRender(entity, everywhere, eye.x, eye.y, eye.z)) {
+                                    found.add(entity);
+                                }
+                            }
+                        }
+                        return found;
+                    }, args);
+                    long framesFrom = FrameClock.frames();
+                    long startedNanos = System.nanoTime();
+                    return waiter.until("the watch to end", watch.ticks() * 100L + 10_000, () -> {
+                        JsonElement seen = watch.tick();
+                        if (seen instanceof JsonObject summary) {
+                            FrameClock.since(framesFrom, startedNanos).entrySet().forEach(e -> summary.add(e.getKey(), e.getValue()));
+                        }
+                        return seen;
+                    });
+                });
+
         ops.add("screenshot", "{name?}",
                 "Saves the last frame to screenshots/ and returns {path}. For what data cannot say: overlap, "
                         + "clipping, colour.",
