@@ -48,7 +48,7 @@ public final class Watch {
 
         void remember(Entity entity) {
             double legs = entity instanceof LivingEntity living ? living.limbAnimator.getSpeed() : 0;
-            this.history[this.written % HISTORY] = new double[] {entity.getX(), entity.getY(), entity.getZ(), entity.getYaw(), legs};
+            this.history[this.written % HISTORY] = new double[] {entity.getX(), entity.getY(), entity.getZ(), facing(entity), legs};
             this.written++;
         }
 
@@ -63,6 +63,14 @@ public final class Watch {
     }
 
     private static final int HISTORY = 10;
+
+    /**
+     * The facing a player sees: a living entity's body, which its model is drawn by and the client eases,
+     * not its yaw, which a server's rotation packets move in steps of three ticks.
+     */
+    private static float facing(Entity entity) {
+        return entity instanceof LivingEntity living ? living.bodyYaw : entity.getYaw();
+    }
 
     private record Event(String kind, int entity, int tick, double value, double x, double y, double z, JsonArray history) {
     }
@@ -142,7 +150,7 @@ public final class Watch {
                     this.jumps++;
                     note("jump", entity, step);
                 }
-                double turned = Math.abs(((entity.getYaw() - track.yaw) % 360 + 540) % 360 - 180);
+                double turned = Math.abs(((facing(entity) - track.yaw) % 360 + 540) % 360 - 180);
                 this.turnMax = Math.max(this.turnMax, turned);
                 if (turned > this.turn) {
                     this.turns++;
@@ -163,7 +171,7 @@ public final class Watch {
             track.x = entity.getX();
             track.y = entity.getY();
             track.z = entity.getZ();
-            track.yaw = entity.getYaw();
+            track.yaw = facing(entity);
             track.lastTick = this.tick;
             track.first = false;
         }
