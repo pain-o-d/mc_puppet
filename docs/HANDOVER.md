@@ -55,6 +55,16 @@ Not seen:
   wrapper is started differently on Windows, and `stop` asks each game by
   its own connection — so run it in a fresh world before tagging.
 
+## `watch`, 2026-09-26 (from `../hivemind`, unreleased)
+
+`watch` on both sides (`core/Watch`, `client/FrameClock`), an operation added,
+so `Protocol.VERSION` stays 1. Built on all four; run live on Fabric 1.21.1
+only, from `../hivemind` (`tools/scenarios/look.json` there). The client's
+"drawn only" asks `EntityRenderDispatcher.shouldRender` with a frustum that
+sees everything; the frame clock is one `nanoTime` a frame from the existing
+render hook. Not seen: NeoForge and 1.20.1 live, and the server watch under a
+real load of thousands.
+
 ## Traps met
 
 - **Gradle's output vanished behind a detached `cmd`** on Windows: the log

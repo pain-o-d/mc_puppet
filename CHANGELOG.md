@@ -5,6 +5,15 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- **`watch`: motion as numbers.** On either side, the entities every tick for
+  up to a minute, and what a screenshot cannot hold: blinks, jumps, sharp turns,
+  sliding (moving with still legs), floating, buried, overlaps, and on the
+  client the frame rate and frame times while it watched; the worst case of each
+  with the entity's last ten ticks. The client counts what the renderer would
+  draw. Written for `../hivemind`, where it found in a minute what weeks of
+  scenarios checking the server had not: ghosts that slid, a crowd that jumped
+  when it became a picture and back, a member that turned round in one tick.
+
 - **Clients that join a server, and as many of them as a test needs.**
   `join_server {address}` connects a client, and `wait {for: world}` after it
   ends at once with the server's words if the player is turned away, instead of

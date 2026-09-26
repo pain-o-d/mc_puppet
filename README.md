@@ -167,7 +167,7 @@ In short:
 
 | Client | |
 |---|---|
-| `info` `screen` `player` `count` `chat` `entities` `screenshot` | seeing |
+| `info` `screen` `player` `count` `chat` `entities` `watch` `screenshot` | seeing |
 | `frame` `tooltip` `hud` `events` | seeing what is not a widget |
 | `block` `blocks` `target` `raycast` `world` `perf` `bindings` | the world as the client has it |
 | `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
@@ -177,7 +177,7 @@ In short:
 
 | Server | |
 |---|---|
-| `info` `players` `inventory` `count` `entities` `entity` `block` | seeing |
+| `info` `players` `inventory` `count` `entities` `watch` `entity` `block` | seeing |
 | `command` (captured output, optional `as` a player) | doing |
 | `wait` (ticks, or players online) | |
 
@@ -238,6 +238,35 @@ effects, health, food, air, experience. `events` is what was over before
 anyone could look — messages, the action bar, titles, toasts and **sounds** —
 numbered, so a test takes `sequence` before acting and asks `since` it after:
 a sound is often all a mod does to say that something worked.
+
+### Seeing motion: `watch`
+
+A screenshot is one frame; what goes wrong with things that move goes wrong
+between frames. `watch` looks at the entities every tick for a while - on the
+client (near the player) or on the server - and says how they moved:
+
+```json
+{ "op": "watch", "args": { "type": "minecraft:zombie", "radius": 48, "ticks": 200 },
+  "show": true,
+  "expect": [ { "path": "jumps", "equals": 0 }, { "path": "blinks", "equals": 0 },
+              { "path": "sliding_share", "lte": 0.05 }, { "path": "overlaps_mean", "lte": 1 } ] }
+```
+
+It answers with `appeared`, `disappeared` and `blinks` (entities that lived
+five ticks or fewer), `step_max`, `step_p95` and `jumps` (a step over `jump`
+blocks in one tick - a teleport), `turn_max` and `turns` (over `turn` degrees
+in a tick), `sliding` and `sliding_share` (moving with legs that do not),
+`floating` (held up over air with no gravity, flyers excepted), `buried`
+(inside a block), `overlaps_mean` and `overlaps_max` (pairs closer than their
+width), and on the client the frames it watched through: `fps`,
+`frame_ms_mean`, `frame_ms_p95`, `frame_ms_max`, `stalls_over_50ms`. `worst`
+has the worst case of each kind with the entity, the tick, where, and its
+last ten ticks (position, facing, legs' speed) - a failed test says what to
+look at. On the client only what the renderer would draw counts
+(`drawn_only`, the default: a mod may draw a stand-in and hide the real
+entity); `ai: false` watches only mobs with no brain, `true` only the rest.
+The server's watch reads the world's entity list and nothing else, so a mod
+that answers entity queries is not disturbed by being watched.
 
 `block`, `blocks`, `target`, `raycast` and `world` read the world as the
 *client* believes it. Ask the server the same and a client out of step with it
