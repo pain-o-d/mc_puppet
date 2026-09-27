@@ -155,6 +155,9 @@ public final class GameJson {
             json.add("passengers", riders);
         }
         if (entity instanceof net.minecraft.entity.LivingEntity living) {
+            if (living.isBaby()) {
+                json.addProperty("baby", true);   // a child's size is part of what a player sees
+            }
             json.addProperty("health", living.getHealth());
             json.addProperty("max_health", living.getMaxHealth());
             JsonObject equipment = new JsonObject();
