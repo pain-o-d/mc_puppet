@@ -157,9 +157,11 @@ public final class ClientOps {
                     }, args);
                     long framesFrom = FrameClock.frames();
                     long startedNanos = System.nanoTime();
+                    FrameCapture.watching(watch);
                     return waiter.until("the watch to end", watch.ticks() * 100L + 10_000, () -> {
                         JsonElement seen = watch.tick();
                         if (seen instanceof JsonObject summary) {
+                            FrameCapture.watching(null);
                             FrameClock.since(framesFrom, startedNanos).entrySet().forEach(e -> summary.add(e.getKey(), e.getValue()));
                         }
                         return seen;

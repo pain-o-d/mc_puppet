@@ -39,6 +39,23 @@ public final class Watch {
         double y;
         double z;
         float yaw;
+        /** Last tick's step, for the jitter: back and forth is a step against the one before. */
+        double stepX;
+        double stepZ;
+        /** Last tick's turn, degrees signed, for the wobble. */
+        double turn;
+        /** Every tick's x, z and yaw when a trace is asked for. */
+        List<double[]> trace;
+        /** The entity itself, for the frames between ticks. */
+        Entity entity;
+        /** Where the last frame drew it, and how it moved to there from the frame before. */
+        double drawnX;
+        double drawnZ;
+        double drawnYaw;
+        double frameX;
+        double frameZ;
+        double frameTurn;
+        int framesSeen;
         int firstTick;
         int lastTick;
         boolean first = true;
@@ -79,6 +96,7 @@ public final class Watch {
     private final int ticks;
     private final double jump;
     private final double turn;
+    private final boolean trace;
     private final Map<Integer, Track> tracks = new HashMap<>();
     private final List<Event> worst = new ArrayList<>();
     private final List<Double> steps = new ArrayList<>();
@@ -99,18 +117,28 @@ public final class Watch {
     private long burning;
     private long overlaps;
     private int overlapsMax;
+    private long reversals;
+    private long wobbles;
+    private long frames;
+    private long frameReversals;
+    private long frameWobbles;
+    private long paceTicks;
+    private double paceSum;
+    private double paceSquares;
     private boolean living;
 
     /**
      * @param source the entities to watch this tick, already filtered by the caller
      * @param args {@code ticks} (default 100), {@code jump} (blocks a tick counted a jump, default 1.0),
-     *             {@code turn} (degrees a tick counted a sharp turn, default 45)
+     *             {@code turn} (degrees a tick counted a sharp turn, default 45), {@code trace} (true: every
+     *             entity's x, z and yaw every tick in the answer, for a script to read)
      */
     public Watch(Supplier<Iterable<Entity>> source, JsonObject args) throws Ops.Refused {
         this.source = source;
         this.ticks = Math.max(1, Math.min(MAX_TICKS, Args.integer(args, "ticks", 100)));
         this.jump = args.has("jump") ? Args.decimal(args, "jump") : 1.0;
         this.turn = args.has("turn") ? Args.decimal(args, "turn") : 45;
+        this.trace = args.has("trace") && args.get("trace").getAsBoolean();
     }
 
     public int ticks() {
@@ -140,11 +168,19 @@ public final class Watch {
                     this.appeared++;
                 }
             }
+            track.entity = entity;
             track.remember(entity);   // this tick's too, so an event's history ends where it happened
+            if (this.trace) {
+                if (track.trace == null) {
+                    track.trace = new ArrayList<>();
+                }
+                track.trace.add(new double[] {this.tick, entity.getX(), entity.getZ(), facing(entity)});
+            }
             if (!track.first) {
                 double dx = entity.getX() - track.x;
                 double dz = entity.getZ() - track.z;
                 double step = Math.sqrt(dx * dx + dz * dz);
+                jitter(track, entity, dx, dz, step);
                 this.steps.add(step);
                 this.stepMax = Math.max(this.stepMax, step);
                 if (step > this.jump) {
@@ -175,6 +211,7 @@ public final class Watch {
             track.x = entity.getX();
             track.y = entity.getY();
             track.z = entity.getZ();
+            track.turn = track.first ? 0 : (((facing(entity) - track.yaw) % 360 + 540) % 360 - 180);
             track.yaw = facing(entity);
             track.lastTick = this.tick;
             track.first = false;
@@ -193,6 +230,84 @@ public final class Watch {
         overlap(now);
         this.tick++;
         return this.tick >= this.ticks ? summary() : null;
+    }
+
+    /**
+     * A frame, between the ticks: where the renderer draws each watched entity now - its position eased from
+     * the last tick's to this one's by {@code tickDelta}, as the renderer eases it - against where the last frame
+     * drew it. A frame's move against the frame before's is a flutter the ticks never show: an entity whose
+     * eased path doubles back, because its last position was reset under it, or set twice a tick. Called by the
+     * client on each frame while a watch runs; a server watch has no frames.
+     */
+    public void frame(float tickDelta) {
+        this.frames++;
+        for (Track track : this.tracks.values()) {
+            Entity entity = track.entity;
+            if (entity == null || !entity.isAlive() || track.lastTick != this.tick - 1) {
+                continue;
+            }
+            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta;
+            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta;
+            double yaw = entity instanceof LivingEntity living
+                    ? living.prevBodyYaw + ((((living.bodyYaw - living.prevBodyYaw) % 360) + 540) % 360 - 180) * tickDelta
+                    : entity.prevYaw + ((((entity.getYaw() - entity.prevYaw) % 360) + 540) % 360 - 180) * tickDelta;
+            if (track.framesSeen > 0) {
+                double dx = x - track.drawnX;
+                double dz = z - track.drawnZ;
+                double turned = ((yaw - track.drawnYaw) % 360 + 540) % 360 - 180;
+                if (track.framesSeen > 1) {
+                    if (Math.hypot(dx, dz) > FRAME_STEP && Math.hypot(track.frameX, track.frameZ) > FRAME_STEP
+                            && dx * track.frameX + dz * track.frameZ < 0) {
+                        this.frameReversals++;
+                        note("flutter", entity, Math.hypot(dx, dz));
+                    }
+                    if (Math.abs(turned) > FRAME_WOBBLE && Math.abs(track.frameTurn) > FRAME_WOBBLE && turned * track.frameTurn < 0) {
+                        this.frameWobbles++;
+                        note("frame_wobble", entity, Math.abs(turned));
+                    }
+                }
+                track.frameX = dx;
+                track.frameZ = dz;
+                track.frameTurn = turned;
+            }
+            track.drawnX = x;
+            track.drawnZ = z;
+            track.drawnYaw = yaw;
+            track.framesSeen++;
+        }
+    }
+
+    /** A frame's move, or turn, small enough to be the renderer's own rounding and not a flutter. */
+    private static final double FRAME_STEP = 0.004;
+    private static final double FRAME_WOBBLE = 0.5;
+
+    /** A step against the one before it, or a turn against the one before it: a twitch no walk makes. */
+    private static final double JITTER_STEP = 0.02;
+    private static final double WOBBLE = 2.0;
+
+    /**
+     * The twitching a jump threshold misses: a step back against the last one (both over {@link #JITTER_STEP}) is a
+     * reversal - a body shoved and put back, a picture's arithmetic at odds with itself; a turn against the last
+     * one, both over {@link #WOBBLE} degrees, is a wobble; and the pace - each step's length while moving - is
+     * summed for its variance, so an even walk and a stop-and-go read differently though both pass the jumps.
+     */
+    private void jitter(Track track, Entity entity, double dx, double dz, double step) {
+        if (step > JITTER_STEP && Math.hypot(track.stepX, track.stepZ) > JITTER_STEP && dx * track.stepX + dz * track.stepZ < 0) {
+            this.reversals++;
+            note("reversal", entity, step);
+        }
+        track.stepX = dx;
+        track.stepZ = dz;
+        double turned = ((facing(entity) - track.yaw) % 360 + 540) % 360 - 180;
+        if (Math.abs(turned) > WOBBLE && Math.abs(track.turn) > WOBBLE && turned * track.turn < 0) {
+            this.wobbles++;
+            note("wobble", entity, Math.abs(turned));
+        }
+        if (step > 0.03) {
+            this.paceTicks++;
+            this.paceSum += step;
+            this.paceSquares += step * step;
+        }
     }
 
     /** On nothing, or inside a block: the block at the feet and the one under them. */
@@ -306,6 +421,18 @@ public final class Watch {
         out.addProperty("burning", this.burning);
         out.addProperty("overlaps_mean", round((double) this.overlaps / Math.max(1, this.tick)));
         out.addProperty("overlaps_max", this.overlapsMax);
+        out.addProperty("reversals", this.reversals);
+        out.addProperty("wobbles", this.wobbles);
+        double paceMean = this.paceTicks == 0 ? 0 : this.paceSum / this.paceTicks;
+        double paceVar = this.paceTicks == 0 ? 0 : Math.max(0, this.paceSquares / this.paceTicks - paceMean * paceMean);
+        out.addProperty("pace_mean", round(paceMean));
+        // the pace's unevenness: its standard deviation over its mean - 0 an even walk, 0.5 a stop-and-go
+        out.addProperty("pace_cv", round(paceMean == 0 ? 0 : Math.sqrt(paceVar) / paceMean));
+        if (this.frames > 0) {
+            out.addProperty("frames_sampled", this.frames);
+            out.addProperty("frame_reversals", this.frameReversals);
+            out.addProperty("frame_wobbles", this.frameWobbles);
+        }
         JsonArray list = new JsonArray();
         for (Event event : this.worst) {
             JsonObject one = new JsonObject();
@@ -318,6 +445,20 @@ public final class Watch {
             list.add(one);
         }
         out.add("worst", list);
+        if (this.trace) {
+            JsonObject traces = new JsonObject();
+            for (Map.Entry<Integer, Track> entry : this.tracks.entrySet()) {
+                if (entry.getValue().trace == null) {
+                    continue;
+                }
+                JsonArray rows = new JsonArray();
+                for (double[] row : entry.getValue().trace) {
+                    rows.add((int) row[0] + " " + round(row[1]) + " " + round(row[2]) + " " + round(row[3]));
+                }
+                traces.add(String.valueOf(entry.getKey()), rows);
+            }
+            out.add("trace", traces);
+        }
         return out;
     }
 

@@ -30,6 +30,11 @@ public final class ClientCompat {
     }
 
     /** Works out again what the crosshair is on, after the head has been turned by hand. */
+    /** How far into the current tick this frame is drawn, 0 to 1: what the renderer eases positions by. */
+    public static float tickDelta(MinecraftClient client) {
+        return client.getRenderTickCounter().getTickDelta(false);
+    }
+
     public static void updateCrosshair(MinecraftClient client) {
         client.gameRenderer.updateCrosshairTarget(1f);
     }

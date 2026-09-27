@@ -258,8 +258,19 @@ blocks in one tick - a teleport), `turn_max` and `turns` (over `turn` degrees
 in a tick), `sliding` and `sliding_share` (moving with legs that do not),
 `floating` (held up over air with no gravity, flyers excepted), `buried`
 (inside a block), `burning` (entity-ticks drawn afire), `overlaps_mean` and `overlaps_max` (pairs closer than their
-width), and on the client the frames it watched through: `fps`,
-`frame_ms_mean`, `frame_ms_p95`, `frame_ms_max`, `stalls_over_50ms`. `worst`
+width), and the twitching a jump threshold misses: `reversals` (a step against
+the one before it - shoved and put back), `wobbles` (a turn against the one
+before it), `pace_mean` and `pace_cv` (each step's length while moving, and its
+unevenness - 0 an even walk, 0.5 a stop-and-go). On the client it also looks
+between the ticks, at every frame, where the renderer draws each entity - eased
+from its last tick's place to this one's - and counts `frame_reversals` and
+`frame_wobbles`, a frame's move or turn against the frame before's: an entity
+nobody places any more, or one placed twice a tick, is drawn sliding from its
+last place and snapping back every tick, a twitch on the spot the tick-by-tick
+numbers never show (`frames_sampled` says over how many frames). And the frames
+it watched through: `fps`, `frame_ms_mean`, `frame_ms_p95`, `frame_ms_max`,
+`stalls_over_50ms`. With `trace: true` the answer carries every entity's tick,
+x, z and facing every tick, for a script to read. `worst`
 has the worst case of each kind with the entity, the tick, where, and its
 last ten ticks (position, facing, legs' speed) - a failed test says what to
 look at. On the client only what the renderer would draw counts
