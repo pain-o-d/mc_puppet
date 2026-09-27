@@ -50,10 +50,11 @@ Not seen:
   bridge, the token, consent and the audit are untouched, but the release
   checklist asks for `prod-check` regardless, and `attack-check` costs ten
   minutes.
-- `../get_rich/tools/run-client-scenarios.sh`, which is the release
-  checklist's real suite. `launch client` changed underneath it — the
-  wrapper is started differently on Windows, and `stop` asks each game by
-  its own connection — so run it in a fresh world before tagging.
+Seen since: `../get_rich/tools/run-client-scenarios.sh`, the release
+checklist's real suite, on 2026-09-27 in a fresh world on Fabric 1.21.1 with
+the jar built from develop that day (`join_server`, `watch`, the baby flag and
+`burning` in) — 11/11 passed, launch and stop as before (JUnit at
+`get_rich/build/client-scenarios.xml`).
 
 ## `watch`, 2026-09-26 (from `../hivemind`, unreleased)
 
