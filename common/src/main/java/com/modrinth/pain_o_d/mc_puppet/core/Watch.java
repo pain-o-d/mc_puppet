@@ -96,6 +96,7 @@ public final class Watch {
     private long sliding;
     private long floating;
     private long buried;
+    private long burning;
     private long overlaps;
     private int overlapsMax;
     private boolean living;
@@ -168,6 +169,9 @@ public final class Watch {
                 }
             }
             standing(entity);
+            if (entity.isOnFire()) {
+                this.burning++;   // drawn afire: a mod that sets or clears fire on what it draws is held to it
+            }
             track.x = entity.getX();
             track.y = entity.getY();
             track.z = entity.getZ();
@@ -299,6 +303,7 @@ public final class Watch {
         }
         out.addProperty("floating", this.floating);
         out.addProperty("buried", this.buried);
+        out.addProperty("burning", this.burning);
         out.addProperty("overlaps_mean", round((double) this.overlaps / Math.max(1, this.tick)));
         out.addProperty("overlaps_max", this.overlapsMax);
         JsonArray list = new JsonArray();
