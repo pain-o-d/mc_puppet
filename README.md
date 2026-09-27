@@ -257,7 +257,7 @@ five ticks or fewer), `step_max`, `step_p95` and `jumps` (a step over `jump`
 blocks in one tick - a teleport), `turn_max` and `turns` (over `turn` degrees
 in a tick), `sliding` and `sliding_share` (moving with legs that do not),
 `floating` (held up over air with no gravity, flyers excepted), `buried`
-(inside a block), `overlaps_mean` and `overlaps_max` (pairs closer than their
+(inside a block), `burning` (entity-ticks drawn afire), `overlaps_mean` and `overlaps_max` (pairs closer than their
 width), and on the client the frames it watched through: `fps`,
 `frame_ms_mean`, `frame_ms_p95`, `frame_ms_max`, `stalls_over_50ms`. `worst`
 has the worst case of each kind with the entity, the tick, where, and its
