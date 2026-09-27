@@ -83,8 +83,22 @@ public final class FrameCapture {
 
     // ---- called from the mixins -----------------------------------------------------
 
+    /** The watch running now, if one: told where each frame draws what it watches. */
+    private static volatile com.modrinth.pain_o_d.mc_puppet.core.Watch watching;
+
+    public static void watching(com.modrinth.pain_o_d.mc_puppet.core.Watch watch) {
+        watching = watch;
+    }
+
     public static void frameBegins() {
         FrameClock.frame();
+        com.modrinth.pain_o_d.mc_puppet.core.Watch watch = watching;
+        if (watch != null) {
+            net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+            if (client.world != null && !client.isPaused()) {
+                watch.frame(com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.tickDelta(client));
+            }
+        }
         if (wanted != null && recording == null) {
             recording = new Frame();
             active = true;

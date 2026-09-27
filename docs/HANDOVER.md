@@ -66,6 +66,12 @@ sees everything; the frame clock is one `nanoTime` a frame from the existing
 render hook. Not seen: NeoForge and 1.20.1 live, and the server watch under a
 real load of thousands.
 
+2026-09-27: the twitch numbers (`reversals`, `wobbles`, `pace_cv`; on the
+client `frame_reversals`, `frame_wobbles` from the frame hook, with the tick
+delta through `ClientCompat.tickDelta` - the one line that differs between
+versions), and `trace`. Run live on Fabric 1.21.1 from `../hivemind`, where
+they found ghosts left in the world twitching on the spot. Built on all four.
+
 ## Traps met
 
 - **Gradle's output vanished behind a detached `cmd`** on Windows: the log

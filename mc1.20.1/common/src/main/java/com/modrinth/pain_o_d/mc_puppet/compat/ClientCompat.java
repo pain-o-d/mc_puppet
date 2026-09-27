@@ -31,6 +31,11 @@ public final class ClientCompat {
     /** The sidebar's slot. A number here; an enum from 1.20.2. */
     private static final int SIDEBAR = 1;
 
+    /** How far into the current tick this frame is drawn, 0 to 1: what the renderer eases positions by. */
+    public static float tickDelta(MinecraftClient client) {
+        return client.getTickDelta();
+    }
+
     public static void updateCrosshair(MinecraftClient client) {
         client.gameRenderer.updateTargetedEntity(1f);
     }

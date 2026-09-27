@@ -5,6 +5,16 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- **`watch` sees the twitching.** `reversals`, `wobbles`, `pace_mean` and
+  `pace_cv` between ticks, and on the client `frame_reversals` and
+  `frame_wobbles` between frames - where the renderer draws each entity, frame
+  by frame, against the frame before. `trace: true` gives every entity's place
+  every tick. Written for `../hivemind`, where a crowd stood twitching on the
+  spot, legs going, and every tick-by-tick number said it stood still: ghosts
+  their group had let go and nobody placed, drawn sliding from their last
+  tick's place and snapping back every frame. 1104 frame reversals in 600
+  frames before, 0 after.
+
 - **`watch`: motion as numbers.** On either side, the entities every tick for
   up to a minute, and what a screenshot cannot hold: blinks, jumps, sharp turns,
   sliding (moving with still legs), floating, buried, overlaps, and on the
