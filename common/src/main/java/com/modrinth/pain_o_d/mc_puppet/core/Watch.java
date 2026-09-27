@@ -55,6 +55,25 @@ public final class Watch {
         void rememberPace(double step) {
             this.pace[this.paces % this.pace.length] = step;
             this.paces++;
+            this.paceSum += step;
+            this.paceSquares += step * step;
+        }
+
+        /** The whole walk's steps, for this entity's own unevenness. */
+        double paceSum;
+        double paceSquares;
+        /** Ticks moving in a row, and ticks still in a row: a stop is still between two walks. */
+        int movingRun;
+        int stillRun;
+        double lastStep;
+
+        double paceCv() {
+            if (this.paces < 20) {
+                return -1;
+            }
+            double mean = this.paceSum / this.paces;
+            double var = Math.max(0, this.paceSquares / this.paces - mean * mean);
+            return mean == 0 ? 0 : Math.sqrt(var) / mean;
         }
         /** Where the last frame drew it, and how it moved to there from the frame before. */
         double drawnX;
@@ -134,6 +153,10 @@ public final class Watch {
     private long sideways;
     private long headAskew;
     private long bursts;
+    private final List<Double> accels = new ArrayList<>();
+    private long accelOver;
+    private long stops;
+    private final List<Double> neighbours = new ArrayList<>();
     private long paceTicks;
     private double paceSum;
     private double paceSquares;
@@ -181,6 +204,14 @@ public final class Watch {
                 }
             }
             track.entity = entity;
+            // An entity out of the radius last tick and back in it now: its last place is stale, and the step from
+            // it would be a jump that never happened. Judged afresh, as an entity first seen.
+            if (!track.first && track.lastTick != this.tick - 1) {
+                track.first = true;
+                track.movingRun = 0;
+                track.stillRun = 0;
+                track.lastStep = 0;
+            }
             track.remember(entity);   // this tick's too, so an event's history ends where it happened
             if (this.trace) {
                 if (track.trace == null) {
@@ -337,8 +368,30 @@ public final class Watch {
                 this.bursts++;
                 note("burst", entity, step / median);
             }
+            // The change of speed from one moving tick to the next: a walk's own is small; a quarter of the
+            // entity's own pace in a tick is a change of speed no walk makes, unless it is starting or stopping.
+            if (track.lastStep > 0.03 && track.movingRun >= 3) {
+                double accel = Math.abs(step - track.lastStep);
+                this.accels.add(accel);
+                if (median > 0 && track.paces >= 20 && accel > 0.25 * median) {
+                    this.accelOver++;
+                    note("accel", entity, accel / median);
+                }
+            }
             track.rememberPace(step);
+            if (track.stillRun > 0 && track.stillRun <= 40 && track.movingRun == 0 && track.paces > 5) {
+                this.stops++;   // walked, stood a moment, walks again
+                note("stop", entity, track.stillRun);
+            }
+            track.movingRun++;
+            track.stillRun = 0;
+        } else {
+            if (track.movingRun > 0) {
+                track.movingRun = 0;
+            }
+            track.stillRun++;
         }
+        track.lastStep = step;
         if (entity instanceof LivingEntity living) {
             double askew = Math.abs(((living.headYaw - living.bodyYaw) % 360 + 540) % 360 - 180);
             if (askew > 75) {
@@ -418,6 +471,37 @@ public final class Watch {
         }
         this.overlaps += pairs;
         this.overlapsMax = Math.max(this.overlapsMax, pairs);
+        // Each moving entity's distance to its nearest moving neighbour within two blocks: a parade's are all
+        // alike, a crowd's are not (neighbour_cv). Cells of a block; the eight around.
+        for (Entity a : now) {
+            Track track = this.tracks.get(a.getId());
+            if (track == null || track.movingRun < 1) {
+                continue;
+            }
+            double nearest = Double.MAX_VALUE;
+            long cx = (long) Math.floor(a.getX());
+            long cz = (long) Math.floor(a.getZ());
+            for (long dx = -2; dx <= 2; dx++) {
+                for (long dz = -2; dz <= 2; dz++) {
+                    List<Entity> cell = cells.get(cell(cx + dx, cz + dz));
+                    if (cell == null) {
+                        continue;
+                    }
+                    for (Entity b : cell) {
+                        Track other = this.tracks.get(b.getId());
+                        if (b == a || other == null || other.movingRun < 1) {
+                            continue;
+                        }
+                        double ex = a.getX() - b.getX();
+                        double ez = a.getZ() - b.getZ();
+                        nearest = Math.min(nearest, ex * ex + ez * ez);
+                    }
+                }
+            }
+            if (nearest < 4) {
+                this.neighbours.add(Math.sqrt(nearest));
+            }
+        }
     }
 
     private static long cell(double x, double z) {
@@ -479,6 +563,32 @@ public final class Watch {
         out.addProperty("backwards", this.backwards);
         out.addProperty("sideways", this.sideways);
         out.addProperty("backwards_share", this.moving == 0 ? 0 : round((double) this.backwards / this.moving));
+        out.addProperty("sideways_share", this.moving == 0 ? 0 : round((double) this.sideways / this.moving));
+        out.addProperty("accel_p95", round(quantile(this.accels, 0.95)));
+        out.addProperty("accel_over", this.accelOver);
+        out.addProperty("stops", this.stops);
+        List<Double> cvs = new ArrayList<>();
+        for (Track track : this.tracks.values()) {
+            double cv = track.paceCv();
+            if (cv >= 0) {
+                cvs.add(cv);
+            }
+        }
+        // each entity's own unevenness of pace: the crowd may be uneven while every member is steady
+        out.addProperty("pace_cv_median", round(quantile(cvs, 0.5)));
+        out.addProperty("pace_cv_p95", round(quantile(cvs, 0.95)));
+        if (!this.neighbours.isEmpty()) {
+            double sum = 0;
+            double squares = 0;
+            for (double d : this.neighbours) {
+                sum += d;
+                squares += d * d;
+            }
+            double mean = sum / this.neighbours.size();
+            double var = Math.max(0, squares / this.neighbours.size() - mean * mean);
+            out.addProperty("neighbour_mean", round(mean));
+            out.addProperty("neighbour_cv", round(mean == 0 ? 0 : Math.sqrt(var) / mean));
+        }
         out.addProperty("head_askew", this.headAskew);
         out.addProperty("bursts", this.bursts);
         if (this.frames > 0) {

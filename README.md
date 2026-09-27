@@ -265,7 +265,16 @@ unevenness - 0 an even walk, 0.5 a stop-and-go), `backwards` and `sideways`
 (steps against the body's facing, beyond 120 degrees and beyond 60;
 `backwards_share` of the moving steps), `head_askew` (the head turned more
 than 75 degrees from the body), `bursts` (a step twice the entity's own median
-pace - a clock skipped, a correction). On the client it also looks
+pace - a clock skipped, a correction), and the likeness of a walk rather
+than its defects: `sideways_share`, `accel_p95` and `accel_over` (the change
+of speed between two moving ticks, and how often it was over a quarter of
+the entity's own pace), `stops` (walked, stood a moment, walked on),
+`pace_cv_median` and `pace_cv_p95` (each entity's own unevenness of pace -
+a crowd may be uneven while every member is steady), `neighbour_mean` and
+`neighbour_cv` (each moving entity's distance to its nearest moving
+neighbour within two blocks - a parade's are all alike). Take the same
+numbers of the same mobs walking on their own, and a group's are read
+against them. On the client it also looks
 between the ticks, at every frame, where the renderer draws each entity - eased
 from its last tick's place to this one's - and counts `frame_reversals` and
 `frame_wobbles`, a frame's move or turn against the frame before's: an entity

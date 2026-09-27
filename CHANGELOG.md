@@ -5,6 +5,13 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- **`watch` measures a walk's likeness, not only its defects.**
+  `sideways_share`, `accel_p95`, `accel_over`, `stops`, `pace_cv_median`,
+  `pace_cv_p95`, `neighbour_mean`, `neighbour_cv`: what a vanilla crowd's
+  walk is in numbers, so that a mod's crowd can be held to it. For
+  `../hivemind`'s requirement that a member in a group walks as the mob
+  walks on its own.
+
 - **`watch` sees the twitching.** `reversals`, `wobbles`, `pace_mean` and
   `pace_cv` between ticks, `backwards` and `sideways` (the body against the
   motion), `head_askew` (the head against the body), `bursts` (a step twice
