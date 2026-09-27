@@ -48,6 +48,14 @@ public final class Watch {
         List<double[]> trace;
         /** The entity itself, for the frames between ticks. */
         Entity entity;
+        /** The last sixty steps' lengths while moving: the entity's own walk, for a burst to be judged against. */
+        final double[] pace = new double[60];
+        int paces;
+
+        void rememberPace(double step) {
+            this.pace[this.paces % this.pace.length] = step;
+            this.paces++;
+        }
         /** Where the last frame drew it, and how it moved to there from the frame before. */
         double drawnX;
         double drawnZ;
@@ -122,6 +130,10 @@ public final class Watch {
     private long frames;
     private long frameReversals;
     private long frameWobbles;
+    private long backwards;
+    private long sideways;
+    private long headAskew;
+    private long bursts;
     private long paceTicks;
     private double paceSum;
     private double paceSquares;
@@ -307,7 +319,43 @@ public final class Watch {
             this.paceTicks++;
             this.paceSum += step;
             this.paceSquares += step * step;
+            // The body against the motion: a facing of yaw degrees looks along (-sin, cos). Walking is within 60
+            // degrees of it; beyond 120 is backwards; between is sideways - a crab, a slide, a turn drawn wrong.
+            double yaw = Math.toRadians(facing(entity));
+            double cos = (dx * -Math.sin(yaw) + dz * Math.cos(yaw)) / step;
+            if (cos < -0.5) {
+                this.backwards++;
+                note("backwards", entity, step);
+            } else if (cos < 0.5) {
+                this.sideways++;
+                note("sideways", entity, step);
+            }
+            // A step twice the walk's own, the walk being the entity's median pace so far: a burst no walk makes
+            // - a clock skipped, a correction. Judged once a walk is known (twenty steps).
+            double median = medianPace(track);
+            if (median > 0 && track.paces >= 20 && step > 2 * median) {
+                this.bursts++;
+                note("burst", entity, step / median);
+            }
+            track.rememberPace(step);
         }
+        if (entity instanceof LivingEntity living) {
+            double askew = Math.abs(((living.headYaw - living.bodyYaw) % 360 + 540) % 360 - 180);
+            if (askew > 75) {
+                this.headAskew++;   // the head turned further from the body than a neck goes
+                note("head_askew", entity, askew);
+            }
+        }
+    }
+
+    private static double medianPace(Track track) {
+        int n = Math.min(track.paces, track.pace.length);
+        if (n == 0) {
+            return 0;
+        }
+        double[] sorted = java.util.Arrays.copyOf(track.pace, n);
+        java.util.Arrays.sort(sorted);
+        return sorted[n / 2];
     }
 
     /** On nothing, or inside a block: the block at the feet and the one under them. */
@@ -428,6 +476,11 @@ public final class Watch {
         out.addProperty("pace_mean", round(paceMean));
         // the pace's unevenness: its standard deviation over its mean - 0 an even walk, 0.5 a stop-and-go
         out.addProperty("pace_cv", round(paceMean == 0 ? 0 : Math.sqrt(paceVar) / paceMean));
+        out.addProperty("backwards", this.backwards);
+        out.addProperty("sideways", this.sideways);
+        out.addProperty("backwards_share", this.moving == 0 ? 0 : round((double) this.backwards / this.moving));
+        out.addProperty("head_askew", this.headAskew);
+        out.addProperty("bursts", this.bursts);
         if (this.frames > 0) {
             out.addProperty("frames_sampled", this.frames);
             out.addProperty("frame_reversals", this.frameReversals);

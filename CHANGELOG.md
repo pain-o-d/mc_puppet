@@ -6,7 +6,9 @@ the same features and the same protocol on every game it is built for.
 ## Unreleased
 
 - **`watch` sees the twitching.** `reversals`, `wobbles`, `pace_mean` and
-  `pace_cv` between ticks, and on the client `frame_reversals` and
+  `pace_cv` between ticks, `backwards` and `sideways` (the body against the
+  motion), `head_askew` (the head against the body), `bursts` (a step twice
+  the entity's own pace), and on the client `frame_reversals` and
   `frame_wobbles` between frames - where the renderer draws each entity, frame
   by frame, against the frame before. `trace: true` gives every entity's place
   every tick. Written for `../hivemind`, where a crowd stood twitching on the

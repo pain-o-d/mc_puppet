@@ -261,7 +261,11 @@ in a tick), `sliding` and `sliding_share` (moving with legs that do not),
 width), and the twitching a jump threshold misses: `reversals` (a step against
 the one before it - shoved and put back), `wobbles` (a turn against the one
 before it), `pace_mean` and `pace_cv` (each step's length while moving, and its
-unevenness - 0 an even walk, 0.5 a stop-and-go). On the client it also looks
+unevenness - 0 an even walk, 0.5 a stop-and-go), `backwards` and `sideways`
+(steps against the body's facing, beyond 120 degrees and beyond 60;
+`backwards_share` of the moving steps), `head_askew` (the head turned more
+than 75 degrees from the body), `bursts` (a step twice the entity's own median
+pace - a clock skipped, a correction). On the client it also looks
 between the ticks, at every frame, where the renderer draws each entity - eased
 from its last tick's place to this one's - and counts `frame_reversals` and
 `frame_wobbles`, a frame's move or turn against the frame before's: an entity
