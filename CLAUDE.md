@@ -3,15 +3,16 @@
 Lets a program on the same machine see and drive a running game, for testing
 mods. Read `README.md` first: it is the user-facing truth, including the
 safety model, and must stay true.
-Then `docs/HANDOVER.md`: what is on `develop` and unreleased, what was seen
+Then `docs/handover.md`: what is on `develop` and unreleased, what was seen
 running and what was not, and what waits for the owner. Keep it current in the
 same commit as the change it describes.
 
-Multi-loader mod built on **Architectury** for **Minecraft 1.21.1**, shipping
-to **Fabric** and **NeoForge** from one shared codebase. Same toolchain, same
-pinned versions and the same network workaround as its sibling `../get_rich`,
-whose `CLAUDE.md` explains the workaround in full
-(`tools/fetch-architectury.sh`; plugin versions pinned exactly).
+Multi-loader mod built on **Architectury** for **Minecraft 1.21.1** (Fabric,
+NeoForge) and **1.20.1** (Fabric, Forge) from one shared codebase. Skeleton,
+pins, ports, the network workaround, gitflow and what is never committed:
+**as the workspace** (`../CLAUDE.md`). Unlike its siblings this project keeps
+its `tools/` self-contained and refers to nothing outside its repository: it
+is a published product, and the tools ship on npm.
 
 ## Layout
 
@@ -113,10 +114,3 @@ outside a development environment, and a real client from a launcher.
 **`docs/RELEASING.md` is how**, with the reason beside every rule; read it
 before touching a version number. `docs/ROADMAP.md` has what an independent
 security review found and what 1.0.0 waits for.
-
-## Git workflow
-
-Gitflow, as in `../get_rich`: `main` is releases, work happens on `develop`,
-`feature/*` and `bugfix/*` merge with `--no-ff`, Conventional Commits.
-
-Never commit `run/`, `build/`, or `.claude/settings.local.json`.
