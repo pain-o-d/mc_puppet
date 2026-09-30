@@ -1,6 +1,7 @@
 package com.modrinth.pain_o_d.mc_puppet.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 import net.minecraft.client.Mouse;
@@ -26,4 +27,11 @@ public interface MouseInvoker {
 
     @Invoker("onMouseScroll")
     void mc_puppet$onMouseScroll(long window, double horizontal, double vertical);
+
+    /** Movement heard and not yet handed on; a frame hands it on and zeroes it. */
+    @Accessor("cursorDeltaX")
+    double mc_puppet$cursorDeltaX();
+
+    @Accessor("cursorDeltaY")
+    double mc_puppet$cursorDeltaY();
 }

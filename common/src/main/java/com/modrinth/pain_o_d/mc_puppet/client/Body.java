@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 
 import com.modrinth.pain_o_d.mc_puppet.core.Args;
 import com.modrinth.pain_o_d.mc_puppet.core.GameJson;
+import com.modrinth.pain_o_d.mc_puppet.core.Gesture;
 import com.modrinth.pain_o_d.mc_puppet.core.Layout;
 import com.modrinth.pain_o_d.mc_puppet.core.Ops;
 import com.modrinth.pain_o_d.mc_puppet.core.Waiter;
@@ -66,6 +67,17 @@ final class Body {
                         + "too. Needs no screen open.",
                 args -> hold(client, waiter, args));
 
+        ops.add("mouse_drag", "{yaw?: 0, pitch?: 0} | {dx?: 0, dy?: 0}, ticks?: 10, "
+                        + "button?: use|attack|left|right|middle|0-7, before?: 2, after?: 2",
+                "Holds a mouse button in the world and moves the mouse while it is held, as a hand on a mouse "
+                        + "does: presses, waits \"before\" ticks, moves by yaw/pitch degrees of turn at the "
+                        + "player's sensitivity (or dx/dy window pixels) spread over \"ticks\", waits \"after\" "
+                        + "ticks once a frame has taken it, lets go. What a mod reads from a drag with the use "
+                        + "button down hears it: a lever pulled by the mouse. Mouse up is a negative pitch. The "
+                        + "button is the mouse button a binding is on (use: right). Works behind other windows. "
+                        + "Returns how far the player's head turned, which is nothing when a mod took the movement.",
+                args -> mouseDrag(client, waiter, args));
+
         ops.now("tap", "{key: drop|swap_hands|inventory|pick_item|<binding name>}",
                 "Presses a key binding once, whatever key it is bound to: drop, swap hands, a mod's own key.",
                 args -> {
@@ -111,6 +123,7 @@ final class Body {
         ops.now("stop", "{}", "Lets go of every key binding and stops breaking.", args -> {
             KeyBinding.unpressAll();
             VirtualKeys.releaseAll();
+            VirtualFocus.end();
             if (client.interactionManager != null) {
                 client.interactionManager.cancelBlockBreaking();
             }
@@ -232,6 +245,95 @@ final class Body {
             held.forEach(binding -> binding.setPressed(false));
             return where(client.player);
         });
+    }
+
+    // ---- the mouse, held -------------------------------------------------------------
+
+    private static CompletableFuture<JsonElement> mouseDrag(MinecraftClient client, Waiter waiter,
+                                                            JsonObject args) throws Ops.Refused {
+        ClientPlayerEntity player = Sight.requirePlayer(client);
+        requireNoScreen(client);
+        int button = mouseButton(client, args);
+        int ticks = Math.max(1, Math.min(20 * 60, Args.integer(args, "ticks", 10)));
+        int before = Math.max(0, Math.min(20 * 60, Args.integer(args, "before", 2)));
+        int after = Math.max(0, Math.min(20 * 60, Args.integer(args, "after", 2)));
+        boolean inPixels = args.has("dx") || args.has("dy");
+        if (inPixels && (args.has("yaw") || args.has("pitch"))) {
+            throw new Ops.Refused("mouse_drag takes yaw and pitch (degrees) or dx and dy (pixels), not both");
+        }
+        double dx;
+        double dy;
+        if (inPixels) {
+            dx = Args.decimal(args, "dx", 0);
+            dy = Args.decimal(args, "dy", 0);
+        } else {
+            double degreesPerPixel = Gesture.degreesPerPixel(client.options.getMouseSensitivity().getValue());
+            dx = Args.decimal(args, "yaw", 0) / degreesPerPixel;
+            dy = Args.decimal(args, "pitch", 0) / degreesPerPixel
+                    * (client.options.getInvertYMouse().getValue() ? -1 : 1);
+        }
+        boolean focused = ((MinecraftClientInvoker) client).mc_puppet$windowFocused();
+        float yaw = player.getYaw();
+        float pitch = player.getPitch();
+        List<Runnable> steps = new ArrayList<>();
+        steps.add(() -> {
+            // Heard once where it is, so that a first move is not taken for the cursor arriving.
+            Input.moveBy(client, 0, 0);
+            Input.button(client, button, true);
+        });
+        for (int i = 0; i < before; i++) {
+            steps.add(() -> { });
+        }
+        for (int i = 0; i < ticks; i++) {
+            steps.add(() -> Input.moveBy(client, dx / ticks, dy / ticks));
+        }
+        Runnable letGo = () -> Input.button(client, button, false);
+        return Input.gesture(client, waiter, "the mouse drag to finish", steps, after, letGo, () -> {
+            JsonObject json = new JsonObject();
+            json.addProperty("button", button);
+            JsonObject moved = new JsonObject();
+            moved.addProperty("dx", Layout.round(dx));
+            moved.addProperty("dy", Layout.round(dy));
+            json.add("moved", moved);
+            ClientPlayerEntity now = client.player;
+            if (now != null) {
+                JsonObject turned = new JsonObject();
+                turned.addProperty("yaw", Layout.round(MathHelper.wrapDegrees(now.getYaw() - yaw)));
+                turned.addProperty("pitch", Layout.round(now.getPitch() - pitch));
+                json.add("turned", turned);
+                json.addProperty("yaw", Layout.round(now.getYaw()));
+                json.addProperty("pitch", Layout.round(now.getPitch()));
+            }
+            json.addProperty("window_focused", focused);
+            return json;
+        }, letGo);
+    }
+
+    /** The mouse button named, or the one a binding is on. */
+    private static int mouseButton(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        JsonElement given = args.get("button");
+        if (given != null && given.isJsonPrimitive() && given.getAsJsonPrimitive().isNumber()) {
+            int code = given.getAsInt();
+            if (code < 0 || code > 7) {
+                throw new Ops.Refused("a mouse button is 0 to 7 (0 left, 1 right, 2 middle), not " + code);
+            }
+            return code;
+        }
+        String name = given == null ? "use" : given.getAsString().toLowerCase(Locale.ROOT);
+        switch (name) {
+            case "left": return 0;
+            case "right": return 1;
+            case "middle": return 2;
+            default:
+                break;
+        }
+        KeyBinding binding = binding(client, name);
+        InputUtil.Key key = InputUtil.fromTranslationKey(binding.getBoundKeyTranslationKey());
+        if (key.getCategory() != InputUtil.Type.MOUSE) {
+            throw new Ops.Refused(binding.getTranslationKey() + " is on " + binding.getBoundKeyTranslationKey()
+                    + ", not a mouse button; name the button (left, right, middle) or use hold");
+        }
+        return key.getCode();
     }
 
     private static JsonObject where(ClientPlayerEntity player) {

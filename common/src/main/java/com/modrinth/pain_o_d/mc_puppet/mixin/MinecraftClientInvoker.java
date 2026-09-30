@@ -1,6 +1,7 @@
 package com.modrinth.pain_o_d.mc_puppet.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
 import net.minecraft.client.MinecraftClient;
@@ -24,4 +25,8 @@ public interface MinecraftClientInvoker {
 
     @Invoker("handleBlockBreaking")
     void mc_puppet$handleBlockBreaking(boolean breaking);
+
+    /** Whether the window really has focus, whatever a test's gesture makes the game believe. */
+    @Accessor("windowFocused")
+    boolean mc_puppet$windowFocused();
 }

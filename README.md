@@ -171,7 +171,7 @@ In short:
 | `frame` `tooltip` `hud` `events` | seeing what is not a widget |
 | `block` `blocks` `target` `raycast` `world` `perf` `bindings` | the world as the client has it |
 | `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
-| `look` `hold` `tap` `move_to` `attack` `break_block` `stop` | the character |
+| `look` `hold` `tap` `mouse_drag` `move_to` `attack` `break_block` `stop` | the character |
 | `set_text` `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
 | `worlds` `create_world` `open_world` `join_server` `leave_world` `window` `quit` `wait` | getting there |
 
@@ -200,6 +200,32 @@ opens the inventory), `"modifiers": ["shift"]` makes a shift-click, and a
 drag over slots spreads a stack as it does for a player. A mod that listens
 for a screen event instead of overriding a method is exercised like any other.
 `"direct": true` calls the screen's own method instead, for the odd case.
+
+**A drag with a button held**, on a screen or in the world, is heard as a
+player's is, behind other windows too. The game takes mouse movement only
+while its window has focus, and hands it on once a frame; so while the button
+is down it is told its window has focus (and, with no screen open, that the
+cursor is grabbed — the real one is left alone), and each move waits for a
+frame to take the last. On a screen, `drag` goes through slots or points,
+each leg cut into `steps` moves for a slider or anything that follows the
+mouse. In the world, `mouse_drag` holds a mouse button and moves the mouse
+while it is held — in degrees of turn at the player's sensitivity, or in
+window pixels — which is what a mod reads when a block is worked by dragging
+with use held down: a lever pulled by the mouse, a wheel turned by it.
+
+```json
+{ "op": "look", "args": { "at": { "x": 4.5, "y": -59.5, "z": 0.5 } } },
+{ "op": "mouse_drag", "args": { "button": "use", "pitch": -90, "ticks": 20, "after": 4 },
+  "note": "use held on the lever, the mouse pushed up, then let go" }
+```
+
+It answers how far the head `turned` — nothing, when a mod took the movement
+for itself — and `window_focused`, whether the window really had focus.
+`button` is `use` (the mouse button that binding is on) by default; `attack`,
+`left`, `right`, `middle` or a number otherwise. Mouse up is a negative
+`pitch`. `before` and `after` are ticks held still after pressing and before
+letting go. `window {focused: false}` tells the game its window lost focus,
+to try a test as it will run behind other windows.
 
 **Names that survive a release build.** A class name is not one:
 `MerchantScreen` is `class_492` in a shipped jar. `screen` reports a
@@ -363,6 +389,9 @@ mining is between the key and its effect, and that is the part exercised.
 from both sides of the game and cleans up after itself;
 `scenarios/eyes-and-hands.json` walks, breaks a block, hits a pig, and reads a
 tooltip, the action bar, a sound and a frame. Both pass on Fabric and NeoForge.
+`scenarios/mouse-drag.json` spreads a stack over four slots by dragging with
+each button, and draws a bow while the mouse turns the head, with the window
+told it lost focus; it passes on all four.
 
 ## Writing tests faster
 
@@ -543,7 +572,8 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
   vertex buffers is pixels only; an item's count is on the item, not a text.
 - `move_to` does not find paths. Build the test world flat, or walk in legs.
 - Input enters at the game's own mouse and keyboard handlers, not through the
-  OS: a mod that registers its own GLFW callback does not hear it. The real
+  OS: a mod that registers its own GLFW callback does not hear it, and one
+  that asks GLFW where the cursor is sees the real one. The real
   mouse still works, and moving it over the window during a test moves the
   cursor.
 - While the bridge is on, the game does not pause when its window loses focus

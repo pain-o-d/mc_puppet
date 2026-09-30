@@ -21,7 +21,7 @@ is a published product, and the tools ship on npm.
 | `common/…/core/` | Plain Java, no game: `Protocol` (wire + token), `Ops` (registry, `help`, `batch`), `Waiter` (tick-driven waits), `Bridge` (the socket), `PuppetConfig`, `Args`. `GameJson` is the one class here that touches the game. |
 | `common/…/client/` | `ClientOps`, `ChatLog`, `PuppetClient`. **Nothing on a dedicated server may load these**; `McPuppet.init` reaches them only inside an environment check. |
 | `common/…/server/` | `ServerOps`. |
-| `common/…/mixin/` | Two client accessor mixins. No injections anywhere, on purpose. |
+| `common/…/mixin/` | Client accessors and invokers (input enters at `Mouse` and `Keyboard`), and a few injections, each `require = 0` and doing nothing unless a test is doing something (a key held, a frame recorded, a mouse gesture). |
 | `fabric/`, `neoforge/` | Entry points and metadata only. |
 | `tools/puppet/` | `lib.js` (discovery + connection), `scenario.js` (the scenario language), `puppet.js` (CLI), `mcp.js` (MCP server). No dependencies. |
 | `scenarios/` | Worked examples, runnable against a dev client. |
