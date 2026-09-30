@@ -12,11 +12,13 @@ import java.util.stream.Stream;
 
 import com.modrinth.pain_o_d.mc_puppet.core.Args;
 import com.modrinth.pain_o_d.mc_puppet.core.GameJson;
+import com.modrinth.pain_o_d.mc_puppet.core.Gesture;
 import com.modrinth.pain_o_d.mc_puppet.core.Ops;
 import com.modrinth.pain_o_d.mc_puppet.core.Reach;
 import com.modrinth.pain_o_d.mc_puppet.core.Waiter;
 import com.modrinth.pain_o_d.mc_puppet.mixin.HandledScreenAccessor;
 import com.modrinth.pain_o_d.mc_puppet.mixin.MerchantScreenAccessor;
+import com.modrinth.pain_o_d.mc_puppet.mixin.MinecraftClientInvoker;
 import com.modrinth.pain_o_d.mc_puppet.mixin.SliderWidgetAccessor;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -217,9 +219,12 @@ public final class ClientOps {
                 });
 
         ops.add("drag", "{from: {x,y}|{slot}|{widget}, to: [{x,y}|{slot}|{widget}, …] | {…}, button?: 0, "
-                        + "modifiers?}",
-                "Presses at \"from\", moves through each of \"to\" a tick apart, and releases at the last. With "
-                        + "a stack on the cursor, dragging over slots spreads it, as it does for a player.",
+                        + "modifiers?, steps?: 1}",
+                "Presses at \"from\", moves through each of \"to\" a tick apart (each leg cut into \"steps\" "
+                        + "moves, for a slider or anything that follows the mouse), and releases at the last once a "
+                        + "frame has taken the movement. With a stack on the cursor, dragging over slots spreads it, "
+                        + "as it does for a player. Works behind other windows: the game is told it has focus while "
+                        + "the button is down. In the world, mouse_drag.",
                 args -> drag(client, waiter, args));
 
         ops.now("scroll", "{amount, x?, y?, widget?, slot?}",
@@ -275,6 +280,7 @@ public final class ClientOps {
 
         ops.now("release_keys", "{}", "Lets go of every key a test is holding.", args -> {
             VirtualKeys.releaseAll();
+            VirtualFocus.end();
             return JsonNull.INSTANCE;
         });
 
@@ -375,8 +381,11 @@ public final class ClientOps {
             return JsonNull.INSTANCE;
         });
 
-        ops.now("window", "{width?, height?, gui_scale?: 0-4}",
-                "Resizes the window and sets the GUI scale (0 is auto). Returns the scaled size.",
+        ops.now("window", "{width?, height?, gui_scale?: 0-4, focused?: true|false}",
+                "Resizes the window and sets the GUI scale (0 is auto). Returns the scaled size, and whether the "
+                        + "game believes its window has focus. \"focused\" tells it the window gained or lost "
+                        + "focus, as the system's focus event does, to try a test as it runs behind other windows; "
+                        + "the next real focus event overrides it.",
                 args -> window(client, args));
 
         ops.add("wait",
@@ -448,6 +457,7 @@ public final class ClientOps {
         window.addProperty("scaled_width", client.getWindow().getScaledWidth());
         window.addProperty("scaled_height", client.getWindow().getScaledHeight());
         window.addProperty("gui_scale", client.getWindow().getScaleFactor());
+        window.addProperty("focused", ((MinecraftClientInvoker) client).mc_puppet$windowFocused());
         return window;
     }
 
@@ -886,6 +896,9 @@ public final class ClientOps {
     }
 
     private static JsonElement window(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        if (args.has("focused")) {
+            client.onWindowFocusChanged(Args.flag(args, "focused", true));
+        }
         if (args.has("width") || args.has("height")) {
             client.getWindow().setWindowedSize(
                     Math.max(320, Args.integer(args, "width", client.getWindow().getWidth())),
@@ -1048,6 +1061,7 @@ public final class ClientOps {
             throw new Ops.Refused("\"to\" names no place");
         }
         int button = Input.buttonOf(args);
+        int legSteps = Math.max(1, Math.min(200, Args.integer(args, "steps", 1)));
         List<Integer> modifiers = new ArrayList<>();
         if (args.has("modifiers") && args.get("modifiers").isJsonArray()) {
             for (JsonElement each : args.getAsJsonArray("modifiers")) {
@@ -1060,16 +1074,21 @@ public final class ClientOps {
             Input.moveTo(client, from[0], from[1]);
             Input.button(client, button, true);
         });
-        for (double[] point : path) {
+        // A pixel's move where it was pressed, as a hand's never-quite-still press makes: a screen hears
+        // a drag begin where the button went down (a stack spread over slots starts on the first).
+        steps.add(() -> Input.moveBy(client, 1, 0));
+        for (double[] point : Gesture.legs(from, path, legSteps)) {
             steps.add(() -> Input.moveTo(client, point[0], point[1]));
         }
         double[] last = path.get(path.size() - 1);
-        steps.add(() -> {
-            Input.moveTo(client, last[0], last[1]);
+        Runnable letGo = () -> {
             Input.button(client, button, false);
             modifiers.forEach(VirtualKeys::release);
-        });
-        return Input.overTicks(waiter, "the drag to finish", steps, () -> new JsonPrimitive(path.size()));
+        };
+        return Input.gesture(client, waiter, "the drag to finish", steps, 0, () -> {
+            Input.moveTo(client, last[0], last[1]);
+            letGo.run();
+        }, () -> new JsonPrimitive(path.size()), letGo);
     }
 
     private static Screen requireScreen(MinecraftClient client) throws Ops.Refused {

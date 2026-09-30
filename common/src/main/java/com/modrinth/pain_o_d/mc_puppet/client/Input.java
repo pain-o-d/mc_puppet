@@ -115,4 +115,65 @@ final class Input {
     static int buttonOf(JsonObject args) throws Ops.Refused {
         return Args.integer(args, "button", 0);
     }
+
+    /** Moves the cursor by so many window pixels from where the game last heard it was. */
+    static void moveBy(MinecraftClient client, double dx, double dy) {
+        ((MouseInvoker) client.mouse).mc_puppet$onCursorPos(client.getWindow().getHandle(),
+                client.mouse.getX() + dx, client.mouse.getY() + dy);
+    }
+
+    /**
+     * Whether the movement heard has been handed on. The game hands it on once
+     * a frame (1.21.1: a screen's drag and the turn of the head both; 1.20.1:
+     * the turn), so a button let go before then is let go where the cursor was.
+     */
+    static boolean settled(MinecraftClient client) {
+        MouseInvoker mouse = (MouseInvoker) client.mouse;
+        return mouse.mc_puppet$cursorDeltaX() == 0 && mouse.mc_puppet$cursorDeltaY() == 0;
+    }
+
+    /**
+     * A gesture with a button held: {@code steps} one a tick and never two
+     * in one frame, the first of which presses; then, once a frame has taken the last movement and
+     * {@code after} more ticks have gone, {@code last}, which lets go. The
+     * window counts as focused throughout ({@link VirtualFocus}); if it ends
+     * any other way, {@code letGo} runs on the game thread.
+     */
+    static CompletableFuture<JsonElement> gesture(MinecraftClient client, Waiter waiter, String what,
+                                                  List<Runnable> steps, int after, Runnable last,
+                                                  Supplier<JsonElement> answer, Runnable letGo) {
+        int[] next = {0};
+        int[] waited = {0};
+        boolean[] done = {false};
+        CompletableFuture<JsonElement> gesture = waiter.until(
+                () -> what + (next[0] >= steps.size() && !settled(client)
+                        ? " (no frame took the last movement: is the window minimised?)" : ""),
+                Math.max(Waiter.DEFAULT_TIMEOUT_MS, (steps.size() + after) * 200L), () -> {
+                    if (next[0] == 0) {
+                        VirtualFocus.begin();
+                    }
+                    if (next[0] < steps.size()) {
+                        // Two ticks can run with no frame between them, and a frame is what hands a
+                        // move on: a step waits for the last to be taken, or two moves arrive as one.
+                        if (next[0] == 0 || settled(client)) {
+                            steps.get(next[0]++).run();
+                        }
+                        return null;
+                    }
+                    if (!settled(client) || waited[0]++ < after) {
+                        return null;
+                    }
+                    last.run();
+                    done[0] = true;
+                    VirtualFocus.end();
+                    return answer.get();
+                });
+        gesture.whenComplete((ignored, failure) -> {
+            VirtualFocus.end();
+            if (!done[0]) {
+                client.execute(letGo);
+            }
+        });
+        return gesture;
+    }
 }

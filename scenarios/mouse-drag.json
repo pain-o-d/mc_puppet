@@ -1,0 +1,61 @@
+{
+  "name": "drag the mouse with a button held, on a screen and in the world",
+  "about": "Run in a flat world with the player called Puppet. The game is told its window lost focus first, as it has behind other windows, where it hears no mouse movement of its own accord. On a screen: a stack on the cursor dragged over four slots with the left button spreads it evenly, and with the right button leaves one in each, which only happens when the game hears the mouse move while the button is down. In the world: the use button held on a bow while the mouse turns the head, then let go, shoots an arrow where the head was turned. Leaves the world as it found it. Runs on 1.20.1 and 1.21.1.",
+  "setup": [
+    {"op":"stop"},
+    {"op":"close_screen","optional":true},
+    {"op":"window","args":{"focused":false},"expect":[{"path":"focused","equals":false}]},
+    {"side":"server","op":"command","args":{"command":"difficulty peaceful"}},
+    {"side":"server","op":"command","args":{"command":"gamemode survival Puppet"}},
+    {"side":"server","op":"command","args":{"command":"kill @e[type=!minecraft:player,distance=..32]","as":"Puppet"}},
+    {"side":"server","op":"command","args":{"command":"clear Puppet"}},
+    {"side":"server","op":"command","args":{"command":"fill -4 -60 -4 4 -56 4 minecraft:air"}},
+    {"side":"server","op":"command","args":{"command":"tp Puppet 0.5 -60 0.5 0 0"}},
+    {"side":"server","op":"command","args":{"command":"give Puppet minecraft:cobblestone 16"}},
+    {"op":"wait_until","args":{"op":"count","args":{"item":"minecraft:cobblestone"},"equals":16,"timeout_ms":5000}}
+  ],
+  "steps": [
+    {"op":"hotbar","args":{"slot":0}},
+    {"op":"key","args":{"key":"e"},"note":"the inventory, by its key"},
+    {"op":"wait","args":{"for":"screen"}},
+    {"op":"wait_until","args":{"op":"screen","path":"slots[slot=36].stack.count","equals":16,"timeout_ms":5000}},
+    {"op":"click_at","args":{"slot":36},"note":"the sixteen on the cursor"},
+    {"op":"wait_until","args":{"op":"screen","path":"cursor.count","equals":16,"timeout_ms":3000}},
+    {"op":"drag","args":{"from":{"slot":9},"to":[{"slot":10},{"slot":11},{"slot":12}],"steps":3},
+     "note":"left button over four slots: an even share each, heard only if the moves reach the screen with the button down"},
+    {"op":"screen","eventually":3000,"expect":[
+      {"path":"slots[slot=9].stack.count","equals":4},{"path":"slots[slot=10].stack.count","equals":4},
+      {"path":"slots[slot=11].stack.count","equals":4},{"path":"slots[slot=12].stack.count","equals":4}]},
+    {"op":"click_at","args":{"slot":9}},
+    {"op":"wait_until","args":{"op":"screen","path":"cursor.count","equals":4,"timeout_ms":3000}},
+    {"op":"drag","args":{"from":{"slot":18},"to":[{"slot":19},{"slot":20}],"button":1},
+     "note":"right button: one in each slot passed over"},
+    {"op":"screen","eventually":3000,"expect":[
+      {"path":"slots[slot=18].stack.count","equals":1},{"path":"slots[slot=19].stack.count","equals":1},
+      {"path":"slots[slot=20].stack.count","equals":1},{"path":"cursor.count","equals":1}]},
+    {"op":"close_screen"},
+    {"side":"server","op":"command","args":{"command":"clear Puppet"}},
+    {"side":"server","op":"command","args":{"command":"give Puppet minecraft:bow 1"}},
+    {"side":"server","op":"command","args":{"command":"give Puppet minecraft:arrow 4"}},
+    {"op":"wait_until","args":{"op":"count","args":{"item":"minecraft:arrow"},"equals":4,"timeout_ms":5000}},
+    {"op":"hotbar","args":{"slot":0}},
+    {"op":"look","args":{"yaw":0,"pitch":0}},
+    {"op":"mouse_drag","args":{"button":"use","yaw":90,"pitch":-30,"ticks":10,"after":4},
+     "note":"the bow drawn by the use button, the head turned by the mouse while it is held, the arrow loosed on letting go",
+     "expect":[{"path":"button","equals":1},{"path":"window_focused","equals":false},
+               {"path":"turned.yaw","gte":88},{"path":"turned.yaw","lte":92},
+               {"path":"turned.pitch","gte":-32},{"path":"turned.pitch","lte":-28}]},
+    {"op":"count","args":{"item":"minecraft:arrow"},"eventually":3000,"expect":[{"path":"","equals":3}]},
+    {"side":"server","op":"entities","args":{"type":"minecraft:arrow"},"eventually":3000,
+     "note":"flying west and up: where the mouse turned the head, not where it looked before",
+     "expect":[{"path":"entities#","gte":1}]}
+  ],
+  "teardown": [
+    {"op":"stop"},
+    {"op":"close_screen","optional":true},
+    {"side":"server","op":"command","args":{"command":"kill @e[type=minecraft:arrow]"}},
+    {"side":"server","op":"command","args":{"command":"clear Puppet"}},
+    {"op":"look","args":{"yaw":0,"pitch":0}},
+    {"op":"window","args":{"focused":true},"note":"as the game believes when it starts"}
+  ]
+}

@@ -5,6 +5,24 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- **`mouse_drag`: a mouse button held in the world while the mouse moves.**
+  Presses a button (the one `use` is on, by default), moves the mouse by
+  degrees of turn at the player's sensitivity or by window pixels over so
+  many ticks, and lets go, all through the game's own mouse handler - what a
+  mod reads when a block is worked by dragging with use held: Create
+  Aeronautics/Simulated's physics assembler lever, a throttle lever, a
+  steering wheel. `hold {keys: [use]}` presses the binding and moves nothing.
+  Asked for by `../tycoon` (its backlog 143) for `../stockyard-create`.
+
+- **A drag is heard behind other windows.** Minecraft takes mouse movement
+  only while its window has focus, and since 1.20.5 hands a screen its drag
+  only then: by the game's code, `drag` over slots in a window without focus
+  on 1.21.1 was a click on the last slot (read, not seen). While a test's
+  button is down the game is told its window has focus (the real cursor is
+  not grabbed), and each move waits for a frame to take the last. `drag` takes `steps`, cutting each leg into
+  so many moves. `window {focused}` tells the game its window gained or lost
+  focus; `window` and `info` say which it believes.
+
 - **`watch` measures a walk's likeness, not only its defects.**
   `sideways_share`, `accel_p95`, `accel_over`, `stops`, `pace_cv_median`,
   `pace_cv_p95`, `neighbour_mean`, `neighbour_cv`: what a vanilla crowd's
