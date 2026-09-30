@@ -15,7 +15,7 @@ PROJECT="${1:-mc_puppet}"
 
 count=$(powershell -NoProfile -Command "
   (Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" |
-   Where-Object { \$_.CommandLine -like '*${PROJECT}*' }).Count" 2>/dev/null | tr -d '[:space:]')
+   Where-Object { \$_.CommandLine -match ('[\\\\/]' + [regex]::Escape('${PROJECT}') + '[\\\\/](?!tools[\\\\/])') }).Count" 2>/dev/null | tr -d '[:space:]')
 
 if [ "${count:-0}" = "0" ]; then
     echo "No ${PROJECT} dev JVMs running."
@@ -23,7 +23,7 @@ else
     echo "Stopping ${count} ${PROJECT} dev JVM(s)..."
     powershell -NoProfile -Command "
       Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" |
-      Where-Object { \$_.CommandLine -like '*${PROJECT}*' } |
+      Where-Object { \$_.CommandLine -match ('[\\\\/]' + [regex]::Escape('${PROJECT}') + '[\\\\/](?!tools[\\\\/])') } |
       ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>/dev/null
     sleep 3
 fi
