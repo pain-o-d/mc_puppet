@@ -16,6 +16,8 @@
  */
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
+const { randomUUID } = require("crypto");
 const { spawn, spawnSync } = require("child_process");
 const { Connection, sameDir } = require("./lib");
 
@@ -34,6 +36,21 @@ const FROM_RUN = ["mods", "config", "options.txt"];
 /** The Gradle task and the game directory of a side, for a Loom or Architectury project. */
 function plan(side, options) {
   if (side !== "client" && side !== "server") throw new Error(`launch client or server, not "${side}"`);
+  const initScripts = options.initScripts || [];
+  if (!Array.isArray(initScripts)) throw new Error("--init-script paths must be a list");
+  const resolvedInitScripts = initScripts.map((file) => {
+    if (typeof file !== "string" || !file.trim() || !/\.gradle$/i.test(file)) {
+      throw new Error("--init-script requires a readable .gradle file");
+    }
+    const resolved = path.resolve(file);
+    try {
+      if (!fs.statSync(resolved).isFile()) throw new Error("not a regular file");
+      fs.accessSync(resolved, fs.constants.R_OK);
+    } catch (error) {
+      throw new Error(`cannot read --init-script ${resolved}: ${error.message}`);
+    }
+    return resolved;
+  });
   const project = path.resolve(options.project || ".");
   const wrapper = path.join(project, process.platform === "win32" ? "gradlew.bat" : "gradlew");
   // A single-loader project has no loader subproject; its run task is at the root.
@@ -58,7 +75,7 @@ function plan(side, options) {
   if (username !== null && side !== "client") throw new Error("--username is for clients");
   const runDir = name === null ? null : `runs/${name}`;
   return {
-    side, project, wrapper, task, loaderDir, name, username, runDir,
+    side, project, wrapper, task, loaderDir, name, username, runDir, initScripts: resolvedInitScripts,
     gameDir: path.join(loaderDir, runDir || "run"),
     log: path.join(project, "build", `mc_puppet-launch-${side}${name === null ? "" : "-" + name}.log`),
   };
@@ -115,30 +132,78 @@ function windowsJava() {
   return java && fs.existsSync(java) ? java : null;
 }
 
+/** Optional external build mutex handoff; the npm tool assumes no workspace path. */
+function registerBuild(planned) {
+  const dir = process.env.LOOM_LOCK_PARTICIPANTS;
+  const token = process.env.LOOM_LOCK_TOKEN;
+  if (!dir && !token) return null;
+  if (!dir || !token || !path.isAbsolute(dir) || !fs.statSync(dir).isDirectory()) {
+    throw new Error("invalid build-lock handoff environment");
+  }
+  const file = path.join(dir, randomUUID() + ".json");
+  const data = { token, hostname: os.hostname(), pid: null, phase: "spawning",
+    gradleRecord: path.basename(file) + ".gradle.json",
+    project: planned.project, gameDir: planned.gameDir, name: planned.name, task: planned.task,
+    started: new Date().toISOString() };
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), { flag: "wx" });
+  return { file, data };
+}
+function updateBuild(lease, changes) {
+  if (!fs.existsSync(lease.file)) return;
+  const current = JSON.parse(fs.readFileSync(lease.file, "utf8"));
+  // This record has one writer (the launcher). Gradle owns its separate
+  // daemon record, so an exit update cannot erase a live daemon or its phase.
+  lease.data = { ...current, ...changes };
+  const temporary = lease.file + "." + randomUUID() + ".tmp";
+  fs.writeFileSync(temporary, JSON.stringify(lease.data, null, 2));
+  fs.renameSync(temporary, lease.file);
+}
+/** Explicit init files remain individual argv entries, beside the launcher's own hook. */
+function gradleArguments(planned, lease) {
+  const words = ["--init-script", path.join(__dirname, "launch.init.gradle")];
+  for (const file of planned.initScripts || []) words.push("--init-script", file);
+  words.push(planned.task, "--console=plain");
+  if (lease) words.push("-Pmc_puppet.build_lease=" + lease.file, "-Pmc_puppet.build_task=" + planned.task);
+  if (planned.runDir !== null) words.push("-Pmc_puppet.run_dir=" + planned.runDir);
+  if (planned.username !== null) words.push("-Pmc_puppet.username=" + planned.username);
+  return words;
+}
+
 function start(planned) {
   fs.mkdirSync(path.dirname(planned.log), { recursive: true });
   const out = fs.openSync(planned.log, "w");
-  const words = ["--init-script", path.join(__dirname, "launch.init.gradle"), planned.task, "--console=plain"];
-  if (planned.runDir !== null) words.push(`-Pmc_puppet.run_dir=${planned.runDir}`);
-  if (planned.username !== null) words.push(`-Pmc_puppet.username=${planned.username}`);
-  const detached = { cwd: planned.project, detached: true, stdio: ["ignore", out, out], windowsHide: true };
-  let child;
-  if (process.platform !== "win32") {
-    child = spawn(planned.wrapper, words, detached);
-  } else {
-    // A .bat is not a program, and the cmd that would run it, started detached, hands its own
-    // output on and loses Java's: the file a failed launch pointed at was always empty. So what
-    // gradlew.bat does is done here, with no cmd between: the wrapper's jar, by the real Java.
-    const java = windowsJava();
-    const jar = path.join(planned.project, "gradle", "wrapper", "gradle-wrapper.jar");
-    child = java && fs.existsSync(jar)
-      ? spawn(java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradlew", "-jar", jar, ...words], detached)
-      // Named, and not through "shell: true", which would paste the arguments into a command line unescaped.
-      : spawn(process.env.ComSpec || "cmd.exe", ["/d", "/c", planned.wrapper, ...words], detached);
+  let lease, child;
+  try {
+    lease = registerBuild(planned);
+    const words = gradleArguments(planned, lease);
+    const detached = { cwd: planned.project, detached: true, stdio: ["ignore", out, out], windowsHide: true };
+    if (process.platform !== "win32") {
+      child = spawn(planned.wrapper, words, detached);
+    } else {
+      // Run Java directly: detached cmd loses the Gradle log on Windows.
+      const java = windowsJava();
+      const jar = path.join(planned.project, "gradle", "wrapper", "gradle-wrapper.jar");
+      child = java && fs.existsSync(jar)
+        ? spawn(java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradlew", "-jar", jar, ...words], detached)
+        : spawn(process.env.ComSpec || "cmd.exe", ["/d", "/c", planned.wrapper, ...words], detached);
+    }
+  } catch (error) {
+    if (lease) updateBuild(lease, {phase:"exited", spawnFailed:true, error:error.message});
+    throw error;
+  } finally {
+    fs.closeSync(out);
   }
   child.unref();
-  const started = { exited: null };
-  child.on("exit", (code) => { started.exited = code; });
+  const started = { exited: null, pid: child.pid || null };
+  if (lease) updateBuild(lease, { pid: started.pid, phase: "building" });
+  child.on("error", error => {
+    started.exited = 1; started.error = error.message;
+    if (lease) updateBuild(lease, {phase:"exited", ...(!started.pid ? {spawnFailed:true} : {}), error:error.message});
+  });
+  child.on("exit", code => {
+    started.exited = code === null ? 1 : code;
+    if (lease) updateBuild(lease, {phase:"exited", wrapperExited:true});
+  });
   return started;
 }
 
@@ -255,4 +320,4 @@ async function stop(puppet, names = []) {
   return unknown.length ? 1 : 0;
 }
 
-module.exports = { launch, stop, plan, prepare };
+module.exports = { launch, stop, plan, prepare, registerBuild, updateBuild, start, gradleArguments };

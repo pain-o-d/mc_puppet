@@ -5,6 +5,30 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- Temporal client input has one scoped owner; stop, release, context changes
+  and timeout revoke pending callbacks and clear owned held/queued presses.
+  Holding attack or use works behind other windows with normal vanilla rules.
+- `hotbar` uses vanilla selection synchronization for an already selected slot,
+  repairing a stale server hand without changing its arguments or null result.
+- `break_block` uses one ordinary owned attack-binding path and observes native
+  ticks, avoiding competing manual and vanilla mining progression.
+
+- The dev launcher optionally hands detached Gradle build ownership to an external
+  mutex supervisor; timeout/failure preserves the child lease until build readiness
+  or proved completion, including a surviving Gradle daemon.
+- Wrapper and Gradle write separate owned lease records, preserving daemon PID
+  and phase when exit/configuration callbacks overlap. The supervisor validates
+  their identities and retains missing or uncertain build ownership.
+- `launch --init-script <file.gradle>` accepts repeated explicit readable init
+  files, preserving path spaces and order beside the launcher's own hook, so
+  consumer pack dependencies can use the same supervised launch.
+- Parallel first Node requests share one pending connection. Closing rejects
+  pending connects/requests and destroys their socket; retired socket events
+  cannot affect a fresh connection, and endpoint restart preserves isolation.
+  Verified by ten real loopback TCP regressions and 16 cold concurrent native
+  server-block reads in a production NeoForge consumer; protocol 1 and the
+  bridge's eight-connection limit remain unchanged.
+
 - **`mouse_drag`: a mouse button held in the world while the mouse moves.**
   Presses a button (the one `use` is on, by default), moves the mouse by
   degrees of turn at the player's sensitivity or by window pixels over so

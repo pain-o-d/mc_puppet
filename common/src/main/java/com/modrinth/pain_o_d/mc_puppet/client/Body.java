@@ -55,6 +55,7 @@ final class Body {
         ops.now("look", "{yaw, pitch} | {at: {x,y,z}} | {entity: uuid} | {type, radius?: 16}",
                 "Turns the head: to angles, at a point, or at an entity. Returns what the crosshair is then on.",
                 args -> {
+                    InputSessions.requireIdle();
                     look(client, args);
                     com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
                     return Sight.hit(client, client.crosshairTarget);
@@ -81,6 +82,7 @@ final class Body {
         ops.now("tap", "{key: drop|swap_hands|inventory|pick_item|<binding name>}",
                 "Presses a key binding once, whatever key it is bound to: drop, swap hands, a mod's own key.",
                 args -> {
+                    InputSessions.requireIdle();
                     KeyBinding binding = binding(client, Args.string(args, "key"));
                     if (binding.isUnbound()) {
                         throw new Ops.Refused(binding.getTranslationKey() + " is not bound to any key");
@@ -99,6 +101,7 @@ final class Body {
                 "A left click in the world. Given an entity, looks at it first. Goes through the game's own "
                         + "attack, so reach, cooldown and what mods do to either apply. Returns what was hit.",
                 args -> {
+                    InputSessions.requireIdle();
                     requireNoScreen(client);
                     if (args.has("entity") || args.has("type")) {
                         look(client, args);
@@ -121,12 +124,7 @@ final class Body {
                 args -> breakBlock(client, waiter, args));
 
         ops.now("stop", "{}", "Lets go of every key binding and stops breaking.", args -> {
-            KeyBinding.unpressAll();
-            VirtualKeys.releaseAll();
-            VirtualFocus.end();
-            if (client.interactionManager != null) {
-                client.interactionManager.cancelBlockBreaking();
-            }
+            InputSessions.releaseAll(client, "input was stopped");
             return JsonNull.INSTANCE;
         });
     }
@@ -226,25 +224,33 @@ final class Body {
         }
         int ticks = Math.max(1, Math.min(20 * 60, Args.integer(args, "ticks")));
         int[] left = {ticks};
-        // The first press is a press: what waits for a key to go down, rather than be down, hears it.
-        for (KeyBinding binding : held) {
-            if (!binding.isUnbound()) {
-                KeyBinding.onKeyPressed(InputUtil.fromTranslationKey(binding.getBoundKeyTranslationKey()));
-            }
+        List<KeyBinding> affected = new ArrayList<>(held);
+        for (KeyBinding binding : held) if (!binding.isUnbound()) {
+            for (KeyBinding shared : Input.bindingsOn(client,
+                    InputUtil.fromTranslationKey(binding.getBoundKeyTranslationKey())))
+                if (!affected.contains(shared)) affected.add(shared);
         }
-        return waiter.until("the keys to have been held", ticks * 50L + 5000, () -> {
-            if (client.player == null) {
-                held.forEach(binding -> binding.setPressed(false));
-                throw new IllegalStateException("the world went away while keys were held");
-            }
-            if (left[0]-- > 0) {
-                // Every tick: opening a screen or losing focus lets go of everything.
-                held.forEach(binding -> binding.setPressed(true));
-                return null;
-            }
-            held.forEach(binding -> binding.setPressed(false));
-            return where(client.player);
+        var manager = client.interactionManager;
+        var session = InputSessions.begin(client, "held keys", true, true, () -> {
+            Input.releaseBindings(affected);
+            if (affected.contains(client.options.attackKey) && manager != null) manager.cancelBlockBreaking();
         });
+        try {
+            // Parse every binding before the first press; preserve ordinary shared-key press counts.
+            for (KeyBinding binding : held) {
+                session.check();
+                if (!binding.isUnbound()) KeyBinding.onKeyPressed(
+                        InputUtil.fromTranslationKey(binding.getBoundKeyTranslationKey()));
+            }
+            return session.track(waiter.until("the keys to have been held", ticks * 50L + 5000, () -> {
+                session.check();
+                if (left[0]-- > 0) {
+                    for (KeyBinding binding : held) { session.check(); binding.setPressed(true); }
+                    return null;
+                }
+                return where(client.player);
+            }));
+        } catch (RuntimeException failure) { session.revoke(failure.getMessage()); throw failure; }
     }
 
     // ---- the mouse, held -------------------------------------------------------------
@@ -287,7 +293,14 @@ final class Body {
         for (int i = 0; i < ticks; i++) {
             steps.add(() -> Input.moveBy(client, dx / ticks, dy / ticks));
         }
-        Runnable letGo = () -> Input.button(client, button, false);
+        List<KeyBinding> queuedBindings = Input.bindingsOn(client, InputUtil.Type.MOUSE.createFromCode(button));
+        var manager = client.interactionManager;
+        Runnable letGo = () -> {
+            try { Input.button(client, button, false); }
+            finally {
+                if (queuedBindings.contains(client.options.attackKey) && manager != null) manager.cancelBlockBreaking();
+            }
+        };
         return Input.gesture(client, waiter, "the mouse drag to finish", steps, after, letGo, () -> {
             JsonObject json = new JsonObject();
             json.addProperty("button", button);
@@ -306,7 +319,7 @@ final class Body {
             }
             json.addProperty("window_focused", focused);
             return json;
-        }, letGo);
+        }, letGo, queuedBindings);
     }
 
     /** The mouse button named, or the one a binding is on. */
@@ -355,16 +368,19 @@ final class Body {
         double z = Args.decimal(args, "z");
         double within = Math.max(0.2, Args.decimal(args, "within", 0.6));
         boolean sprint = Args.flag(args, "sprint", false);
+        long timeout = Args.timeout(args, 15000);
         GameOptions options = client.options;
         Runnable letGo = () -> {
             options.forwardKey.setPressed(false);
             options.jumpKey.setPressed(false);
             options.sprintKey.setPressed(false);
         };
+        var session = InputSessions.begin(client, "walking", true, true, letGo);
         CompletableFuture<JsonElement> walked = waiter.until(
                 () -> "the player to reach " + x + ", " + z + "; it is at "
                         + (client.player == null ? "nowhere" : GameJson.pos(client.player.getPos())),
-                Args.timeout(args, 15000), () -> {
+                timeout, () -> {
+                    session.check();
                     ClientPlayerEntity player = client.player;
                     if (player == null) {
                         throw new IllegalStateException("the world went away on the way");
@@ -386,8 +402,7 @@ final class Body {
                             || player.isTouchingWater());
                     return null;
                 });
-        walked.whenComplete((ignored, failure) -> letGo.run());
-        return walked;
+        return session.track(walked);
     }
 
     // ---- breaking --------------------------------------------------------------------
@@ -396,7 +411,9 @@ final class Body {
                                                              JsonObject args) throws Ops.Refused {
         ClientPlayerEntity player = Sight.requirePlayer(client);
         requireNoScreen(client);
+        InputSessions.requireIdle();
         BlockPos pos = new BlockPos(Args.integer(args, "x"), Args.integer(args, "y"), Args.integer(args, "z"));
+        long timeout = Args.timeout(args, 30000);
         if (Sight.requireWorld(client).getBlockState(pos).isAir()) {
             throw new Ops.Refused("there is no block at " + pos.toShortString());
         }
@@ -409,33 +426,50 @@ final class Body {
                     : client.crosshairTarget instanceof EntityHitResult ? "an entity" : "nothing within reach";
             throw new Ops.Refused("looking at " + pos.toShortString() + " the crosshair is on " + instead);
         }
-        MinecraftClientInvoker game = (MinecraftClientInvoker) client;
-        game.mc_puppet$handleBlockBreaking(false);
-        int[] ticks = {0};
-        CompletableFuture<JsonElement> broken = waiter.until(() -> was + " at " + pos.toShortString()
-                + " to break", Args.timeout(args, 30000), () -> {
-                    if (client.player == null || client.world == null) {
-                        throw new IllegalStateException("the world went away while breaking");
-                    }
-                    if (!client.world.getBlockState(pos).isOf(Registries.BLOCK.get(
-                            net.minecraft.util.Identifier.tryParse(was)))) {
-                        JsonObject json = new JsonObject();
-                        json.addProperty("broke", was);
-                        json.addProperty("ticks", ticks[0]);
-                        return json;
-                    }
-                    ticks[0]++;
-                    client.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, Vec3d.ofCenter(pos));
-                    com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
-                    game.mc_puppet$handleBlockBreaking(true);
-                    return null;
-                });
-        broken.whenComplete((ignored, failure) -> {
-            if (client.player != null) {
-                game.mc_puppet$handleBlockBreaking(false);
-            }
+        KeyBinding attack = client.options.attackKey;
+        if (attack.isUnbound()) {
+            throw new Ops.Refused(attack.getTranslationKey() + " is not bound to any key");
+        }
+        InputUtil.Key physicalKey = InputUtil.fromTranslationKey(attack.getBoundKeyTranslationKey());
+        List<KeyBinding> affected = new ArrayList<>(Input.bindingsOn(client, physicalKey));
+        if (!affected.contains(attack)) affected.add(attack);
+        var manager = client.interactionManager;
+        var session = InputSessions.begin(client, "breaking a block", true, true, () -> {
+            Input.releaseBindings(affected);
+            if (manager != null) manager.cancelBlockBreaking();
         });
-        return broken;
+        try {
+            session.check();
+            if (manager != null) manager.cancelBlockBreaking();
+            int startedAge = player.age;
+            // One ordinary initial press and held binding. Vanilla owns every mining update.
+            KeyBinding.onKeyPressed(physicalKey);
+            attack.setPressed(true);
+            CompletableFuture<JsonElement> broken = waiter.until(() -> was + " at " + pos.toShortString()
+                    + " to break", timeout, () -> {
+                        session.check();
+                        if (client.player == null || client.world == null) {
+                            throw new IllegalStateException("the world went away while breaking");
+                        }
+                        if (!client.world.getBlockState(pos).isOf(Registries.BLOCK.get(
+                                net.minecraft.util.Identifier.tryParse(was)))) {
+                            JsonObject json = new JsonObject();
+                            json.addProperty("broke", was);
+                            json.addProperty("ticks", Math.max(0, player.age - startedAge));
+                            return json;
+                        }
+                        client.player.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, Vec3d.ofCenter(pos));
+                        com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.updateCrosshair(client);
+                        if (!(client.crosshairTarget instanceof BlockHitResult hit)
+                                || !hit.getBlockPos().equals(pos)) {
+                            throw new IllegalStateException("the target block moved out of reach or became obscured");
+                        }
+                        session.check();
+                        attack.setPressed(true);
+                        return null;
+                    });
+            return session.track(broken);
+        } catch (RuntimeException failure) { session.revoke(failure.getMessage()); throw failure; }
     }
 
     private static void requireNoScreen(MinecraftClient client) throws Ops.Refused {

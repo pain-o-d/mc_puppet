@@ -40,3 +40,50 @@ allprojects { project ->
         }
     }
 }
+
+
+// Optional external build mutex. The daemon PID guards remapping even if its
+// detached wrapper dies. The run task boundary releases only the build lease.
+def buildLease = asked['mc_puppet.build_lease']
+def buildTask = asked['mc_puppet.build_task']
+if (buildLease && buildTask) {
+    def lease = new File(buildLease)
+    if (!lease.isFile()) throw new GradleException("Build-lock lease disappeared")
+    def wrapper = new groovy.json.JsonSlurper().parse(lease)
+    if (wrapper.gradleRecord != lease.name + '.gradle.json') {
+        throw new GradleException("Invalid build-lock daemon record")
+    }
+    def daemonRecord = new File(lease.parentFile, wrapper.gradleRecord)
+    def data = [token: wrapper.token, hostname: wrapper.hostname, lease: lease.name,
+                buildPid: java.lang.ProcessHandle.current().pid(), phase: 'building']
+    def changeLease = { changes ->
+        if (!lease.isFile()) {
+            // The supervisor deliberately removes the build lease after ready;
+            // normal game shutdown must not turn that handoff into a build error.
+            if (data.phase == 'ready' || data.phase == 'exited') return
+            throw new GradleException("Build-lock lease disappeared while building")
+        }
+        data.putAll(changes)
+        def temporary = new File(lease.parentFile, daemonRecord.name + '.tmp')
+        temporary.setText(groovy.json.JsonOutput.toJson(data), 'UTF-8')
+        java.nio.file.Files.move(temporary.toPath(), daemonRecord.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    }
+    changeLease([phase: 'building'])
+    gradle.buildFinished { result ->
+        changeLease([phase: 'exited', finished: java.time.Instant.now().toString()])
+    }
+    allprojects { project ->
+        project.tasks.configureEach { task ->
+            if (task.path == buildTask || (project == rootProject && task.name == buildTask)) {
+                task.doFirst {
+                    if (!new File(buildLease).isFile()) {
+                        throw new GradleException("Build-lock lease disappeared before " + task.path)
+                    }
+                    changeLease([phase: 'ready', ready: java.time.Instant.now().toString()])
+                }
+            }
+        }
+    }
+}

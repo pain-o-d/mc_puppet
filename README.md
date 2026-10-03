@@ -28,7 +28,7 @@ by somebody looking at it. MC Puppet makes the client answer questions.
 
 Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge), those two versions exactly · needs [Architectury API](https://modrinth.com/mod/architectury-api), and on Fabric [Fabric API](https://modrinth.com/mod/fabric-api) · MIT
 
-> **Beta.** Used so far by one mod's test suite, its author's. Seen working: the
+> **Beta.** Used by local mod and pack integration suites. Seen working: the
 > scenarios on all four targets in development environments, and the built jar
 > in a real NeoForge 1.21.1 server. **Not yet tried**: the other three jars
 > outside a development environment, and a real client from an ordinary
@@ -334,6 +334,29 @@ as long as that takes with what is in hand — dirt by hand is fifteen ticks, an
 a test can say so. None of it teleports: what a mod does to movement, reach or
 mining is between the key and its effect, and that is the part exercised.
 
+Temporal input (`hold`, `move_to`, `break_block`, `drag`, `mouse_drag` and
+`hotbar`) has one owner. Overlapping input refuses; reads and waits
+remain available. `stop` or `release_keys` revokes the owner before queued
+callbacks can press again. A changed world, player, connection or screen,
+leaving this machine, timeout and client shutdown also release its input.
+Held input and mouse gestures use scoped focus behind other windows without
+grabbing the real cursor. Cleanup releases the owned bindings and their queued
+presses; ordinary vanilla mining, tool wear and server checks still apply.
+Closing a socket does not cancel its request: use `stop` or `release_keys`.
+
+`hotbar {slot: 0}` synchronizes the clamped slot through vanilla's selection
+handler even when that slot already appears selected on the client. It returns
+`null` as before. Ask the server's inventory or `SelectedItemSlot` for the
+authoritative result; client state alone does not establish what is in hand.
+
+The current input repair passed 169 scenario steps and 83 native input checks
+on each of the four development targets. A production NeoForge consumer also
+verified same-slot repair, 16 cold concurrent server-block reads and ordinary
+two-USE mod interaction with exact item consumption. Read concurrency shares
+one pending Node connection for the same endpoint; temporal input retains its
+single owner. The [handover](https://github.com/pain-o-d/mc_puppet/blob/develop/docs/handover.md)
+records the checked scope and preserved failures.
+
 ## Scenarios
 
 ```json
@@ -453,6 +476,12 @@ The project's build file is not touched: an init script says all this to Gradle
 for the one run. Builds start one after another and the games load side by side;
 three dev clients were in a world 41 seconds after the command.
 
+`launch --init-script <file.gradle>` adds an explicit readable Gradle init file
+beside the launcher's own hook. Repeat the option for several files; their order
+is preserved. Relative paths resolve from the invoking working directory, and
+spaces remain part of the argument. A consumer can use this to add its test-pack
+dependencies without changing the project or losing the build-mutex handoff.
+
 `join_server {address}` is the operation underneath, followed by
 `wait {for: world}`, which ends at once with the server's own words if the
 player is turned away. It goes to `localhost` or a loopback address and to
@@ -463,6 +492,20 @@ connection is then one to this machine, which is true: whoever can open that
 tunnel can log in there. The server can stay bound to its own loopback, which
 an offline-mode server should be anyway. Its own bridge stays there with its
 token; ask it over RCON, or run the scenario's server steps on that machine.
+
+
+
+### External build mutexes
+
+A launcher supervisor may set LOOM_LOCK_PARTICIPANTS to an absolute directory
+and LOOM_LOCK_TOKEN to its ownership token. Each detached Gradle invocation
+writes a wrapper lease there; Gradle owns its separate `.json.gradle.json`
+record with daemon PID and phase. The init script changes that record from
+building to ready just before the chosen run task, after compilation/remapping
+dependencies. The supervisor validates both records and can release its build
+mutex at ready while Minecraft runs. Wrapper exit cannot overwrite the daemon
+record; a missing or uninspectable build record requires owner inspection.
+Without these variables the npm launcher is standalone.
 
 ## Operations of your own mod
 

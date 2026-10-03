@@ -180,7 +180,7 @@ public final class ClientOps {
         ops.now("click_widget", "{index?: n, text?: substring, button?: 0, modifiers?, direct?: false}",
                 "Clicks a widget at its centre, by index from \"screen\" or by its text, through the game's "
                         + "mouse handler. \"direct\" calls the screen's own method instead, skipping loader events.",
-                args -> clickWidget(client, args));
+                args -> { InputSessions.requireIdle(); return clickWidget(client, args); });
 
         ops.now("click_at", "{x, y} | {slot: n} | {widget: index|text}, button?: 0, "
                         + "modifiers?: [shift|control|alt], direct?: false",
@@ -188,6 +188,7 @@ public final class ClientOps {
                         + "{slot: 2, modifiers: [shift]} is the shift-click a player makes. With no screen open it "
                         + "is a click in the world: the attack or use key.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = pointOf(client, args);
                     double x = at[0];
                     double y = at[1];
@@ -208,6 +209,7 @@ public final class ClientOps {
                 "Moves the cursor there and waits a frame, so that what hovering shows is on screen: a tooltip, "
                         + "a highlight. Follow with tooltip, frame or screenshot.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = pointOf(client, args);
                     Input.moveTo(client, at[0], at[1]);
                     return Input.overTicks(waiter, "a frame", List.of(() -> { }, () -> { }), () -> {
@@ -231,6 +233,7 @@ public final class ClientOps {
                 "Turns the wheel, positive up, over a point, a widget or a slot; by default the middle of the "
                         + "screen. A merchant's list of trades scrolls this way.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = args.has("x") || args.has("widget") || args.has("slot")
                             ? pointOf(client, args)
                             : new double[] {client.getWindow().getScaledWidth() / 2.0,
@@ -241,7 +244,7 @@ public final class ClientOps {
 
         ops.now("click_slot", "{slot, button?: 0, action?: PICKUP|QUICK_MOVE|SWAP|CLONE|THROW|PICKUP_ALL}",
                 "Clicks a container slot as the player would; QUICK_MOVE is shift-click.",
-                args -> clickSlot(client, args));
+                args -> { InputSessions.requireIdle(); return clickSlot(client, args); });
 
         ops.now("select_trade", "{index}", "Selects a merchant's offer, as clicking it in the list does.",
                 args -> selectTrade(client, args));
@@ -254,6 +257,9 @@ public final class ClientOps {
                 args -> {
                     int code = VirtualKeys.code(Args.string(args, "key"));
                     String action = Args.string(args, "action", "tap");
+                    Input.modifiers(args); // Resolve the whole request before revoking or pressing anything.
+                    if (action.equals("release")) InputSessions.revoke("a key was released");
+                    else InputSessions.requireIdle();
                     return Input.withModifiers(args, () -> {
                         if (!action.equals("release")) {
                             Input.key(client, code, true);
@@ -269,6 +275,7 @@ public final class ClientOps {
                 "Focuses a text field and sets what it holds, as if typed over: its listeners hear it. For a "
                         + "field among several; \"type\" goes to whichever has focus.",
                 args -> {
+                    InputSessions.requireIdle();
                     Screen screen = requireScreen(client);
                     if (!(widgetBy(screen, Args.string(args, "widget")) instanceof TextFieldWidget field)) {
                         throw new Ops.Refused("that widget is not a text field");
@@ -279,13 +286,13 @@ public final class ClientOps {
                 });
 
         ops.now("release_keys", "{}", "Lets go of every key a test is holding.", args -> {
-            VirtualKeys.releaseAll();
-            VirtualFocus.end();
+            InputSessions.releaseAll(client, "input was released");
             return JsonNull.INSTANCE;
         });
 
         ops.now("type", "{text}", "Types text, through the game's keyboard handler, into whatever has focus.",
                 args -> {
+                    InputSessions.requireIdle();
                     Input.type(client, Args.string(args, "text"));
                     return JsonNull.INSTANCE;
                 });
@@ -312,9 +319,10 @@ public final class ClientOps {
 
         ops.now("use_entity", "{uuid? | type?, radius?: 6}",
                 "Looks at and right-clicks an entity: by uuid, or the nearest of a type. Opens a villager.",
-                args -> useEntity(client, args));
+                args -> { InputSessions.requireIdle(); return useEntity(client, args); });
 
         ops.now("use_block", "{x, y, z, side?: up}", "Looks at and right-clicks a block.", args -> {
+            InputSessions.requireIdle();
             ClientPlayerEntity player = requirePlayer(client);
             BlockPos pos = new BlockPos(Args.integer(args, "x"), Args.integer(args, "y"), Args.integer(args, "z"));
             Direction side = Direction.byName(Args.string(args, "side", "up"));
@@ -324,12 +332,40 @@ public final class ClientOps {
                     new BlockHitResult(centre, side == null ? Direction.UP : side, pos, false)).toString());
         });
 
-        ops.now("use_item", "{}", "Right-clicks with the held item.", args -> new JsonPrimitive(
-                client.interactionManager.interactItem(requirePlayer(client), Hand.MAIN_HAND).toString()));
+        ops.now("use_item", "{}", "Right-clicks with the held item.", args -> {
+            InputSessions.requireIdle();
+            return new JsonPrimitive(client.interactionManager.interactItem(requirePlayer(client), Hand.MAIN_HAND).toString());
+        });
 
-        ops.now("hotbar", "{slot: 0-8}", "Selects a hotbar slot.", args -> {
-            requirePlayer(client).getInventory().selectedSlot = Math.max(0, Math.min(8, Args.integer(args, "slot")));
-            return JsonNull.INSTANCE;
+        ops.add("hotbar", "{slot: 0-8}", "Selects a hotbar slot and completes vanilla slot synchronization.", args -> {
+            ClientPlayerEntity player = requirePlayer(client);
+            int desired = Math.max(0, Math.min(8, Args.integer(args, "slot")));
+            if (client.currentScreen != null) throw new Ops.Refused("a screen is open; close_screen before hotbar");
+            if (client.interactionManager == null) throw new Ops.Refused("no client interaction manager is ready");
+            // Do not press potentially unbound/remapped/shared keys: use vanilla's selection seam.
+            // A single sync of the desired slot cannot repair an already-desired stale cache.
+            var sync = (com.modrinth.pain_o_d.mc_puppet.mixin.ClientPlayerInteractionManagerInvoker)
+                    client.interactionManager;
+            var session = InputSessions.begin(client, "hotbar synchronization", true, false, () -> { });
+            int[] stage = {0};
+            return session.track(waiter.until("vanilla hotbar synchronization", 5000, () -> {
+                session.check();
+                if (stage[0]++ == 0) {
+                    player.getInventory().selectedSlot = (desired + 1) % 9;
+                    // Atomic on the game thread: no gameplay tick sees the intermediate hand.
+                    try { sync.mc_puppet$syncSelectedSlot(); }
+                    finally { player.getInventory().selectedSlot = desired; }
+                    session.check();
+                    sync.mc_puppet$syncSelectedSlot();
+                } else if (stage[0] == 2) {
+                    return null; // Include a subsequent native tick before reporting completion.
+                } else {
+                    if (player.getInventory().selectedSlot != desired)
+                        throw new IllegalStateException("the selected slot changed during synchronization");
+                    return JsonNull.INSTANCE; // Client synchronization boundary, not server acknowledgement.
+                }
+                return null;
+            }));
         });
 
         // ---- getting there ----------------------------------------------------
