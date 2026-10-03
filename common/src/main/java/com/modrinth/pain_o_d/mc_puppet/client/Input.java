@@ -14,6 +14,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
 
 /**
  * A mouse and a keyboard nobody is holding.
@@ -80,20 +82,26 @@ final class Input {
      */
     static <T> T withModifiers(JsonObject args, Supplier<T> action) throws Ops.Refused {
         List<Integer> held = new ArrayList<>();
-        if (args.has("modifiers") && args.get("modifiers").isJsonArray()) {
-            for (JsonElement each : args.getAsJsonArray("modifiers")) {
-                int code = VirtualKeys.code(each.getAsString());
-                if (!VirtualKeys.isHeld(code)) {
-                    VirtualKeys.hold(code);
-                    held.add(code);
-                }
-            }
-        }
+        List<Integer> requested = modifiers(args);
         try {
+            for (int code : requested) if (!VirtualKeys.isHeld(code)) {
+                VirtualKeys.hold(code);
+                held.add(code);
+            }
             return action.get();
         } finally {
             held.forEach(VirtualKeys::release);
         }
+    }
+
+    static List<Integer> modifiers(JsonObject args) throws Ops.Refused {
+        List<Integer> requested = new ArrayList<>();
+        if (args.has("modifiers") && args.get("modifiers").isJsonArray()) {
+            for (JsonElement each : args.getAsJsonArray("modifiers")) {
+                requested.add(VirtualKeys.code(each.getAsString()));
+            }
+        }
+        return requested;
     }
 
     /**
@@ -114,6 +122,23 @@ final class Input {
 
     static int buttonOf(JsonObject args) throws Ops.Refused {
         return Args.integer(args, "button", 0);
+    }
+
+    /** Capture all configured bindings a real press on this physical key can enqueue. */
+    static List<KeyBinding> bindingsOn(MinecraftClient client, InputUtil.Key key) {
+        List<KeyBinding> found = new ArrayList<>();
+        for (KeyBinding binding : client.options.allKeys) {
+            if (binding.getBoundKeyTranslationKey().equals(key.getTranslationKey())) found.add(binding);
+        }
+        return found;
+    }
+
+    static void releaseBindings(List<KeyBinding> bindings) {
+        for (KeyBinding binding : bindings) {
+            binding.setPressed(false);
+            // setPressed(false) alone leaves a queued attack/use/mod press for the next scope.
+            while (binding.wasPressed()) { }
+        }
     }
 
     /** Moves the cursor by so many window pixels from where the game last heard it was. */
@@ -141,17 +166,27 @@ final class Input {
      */
     static CompletableFuture<JsonElement> gesture(MinecraftClient client, Waiter waiter, String what,
                                                   List<Runnable> steps, int after, Runnable last,
-                                                  Supplier<JsonElement> answer, Runnable letGo) {
+                                                  Supplier<JsonElement> answer, Runnable letGo) throws Ops.Refused {
+        return gesture(client, waiter, what, steps, after, last, answer, letGo, List.of());
+    }
+
+    static CompletableFuture<JsonElement> gesture(MinecraftClient client, Waiter waiter, String what,
+                                                  List<Runnable> steps, int after, Runnable last,
+                                                  Supplier<JsonElement> answer, Runnable letGo,
+                                                  List<KeyBinding> queuedBindings) throws Ops.Refused {
         int[] next = {0};
         int[] waited = {0};
         boolean[] done = {false};
+        var session = InputSessions.begin(client, what, client.currentScreen == null, true,
+                () -> {
+                    try { if (!done[0]) letGo.run(); }
+                    finally { releaseBindings(queuedBindings); }
+                });
         CompletableFuture<JsonElement> gesture = waiter.until(
                 () -> what + (next[0] >= steps.size() && !settled(client)
                         ? " (no frame took the last movement: is the window minimised?)" : ""),
                 Math.max(Waiter.DEFAULT_TIMEOUT_MS, (steps.size() + after) * 200L), () -> {
-                    if (next[0] == 0) {
-                        VirtualFocus.begin();
-                    }
+                    session.check();
                     if (next[0] < steps.size()) {
                         // Two ticks can run with no frame between them, and a frame is what hands a
                         // move on: a step waits for the last to be taken, or two moves arrive as one.
@@ -165,15 +200,8 @@ final class Input {
                     }
                     last.run();
                     done[0] = true;
-                    VirtualFocus.end();
                     return answer.get();
                 });
-        gesture.whenComplete((ignored, failure) -> {
-            VirtualFocus.end();
-            if (!done[0]) {
-                client.execute(letGo);
-            }
-        });
-        return gesture;
+        return session.track(gesture);
     }
 }

@@ -38,6 +38,7 @@
  *   --template <dir>  launch client: what a new runs/<name> is a copy of (default: mods, config and
  *                     options.txt of the loader's run/)
  *   --timeout <s>     launch: how long a start may take (default: 600)
+ *   --init-script <file.gradle> launch: add an explicit readable init file; repeatable, beside the launcher hook
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
  *   --no-log          do not fail a scenario for errors the game logged while it ran
@@ -72,7 +73,7 @@ async function main() {
   let junit = null;
   let updateGolden = false;
   const launchOptions = { project: ".", loader: "fabric", world: null, server: null, name: null, username: null,
-    template: null, timeout: 600 };
+    template: null, timeout: 600, initScripts: [] };
   const words = [];
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === "--dir") dirs.push(argv[++index]);
@@ -89,6 +90,11 @@ async function main() {
     else if (argv[index] === "--username") launchOptions.username = argv[++index];
     else if (argv[index] === "--template") launchOptions.template = argv[++index];
     else if (argv[index] === "--timeout") launchOptions.timeout = Number(argv[++index]);
+    else if (argv[index] === "--init-script") {
+      const file = argv[++index];
+      if (!file || file.startsWith("--")) throw new Error("--init-script needs a .gradle file path");
+      launchOptions.initScripts.push(file);
+    }
     else words.push(argv[index]);
   }
   const puppet = new Puppet(dirs);

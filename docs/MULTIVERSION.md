@@ -98,6 +98,30 @@ are optional, and the build says "Cannot remap drawGuiTexture" and goes on.
 
 ## What only running it found
 
+The 2026-10-03 temporal-input repair shares `InputSession`, its client adapter
+and `ClientPlayerInteractionManagerInvoker` between both versions. Source
+inspection found the same `syncSelectedSlot()V` descriptor and vanilla cached
+slot/packet path on 1.20.1 and 1.21.1; the invoker is listed only in each
+build's client mixins. Revision 1 built all four and passed 83 core tests per
+version. Its first Fabric live suites passed, but subsequent save-transport
+and mining attempts failed as recorded in the handover. Revision 2 changes
+`break_block` to ordinary owned attack input. All four current builds/remap
+checks passed, with 83 core tests on each version and 33 launcher/scenario
+checks. Fresh development clients on all four targets each passed 169 scenario
+steps and 83 native input checks, including the unchanged 10--25 native-tick
+hand-mining assertion, authoritative slot readbacks after normal reopen,
+pending-input cancellation, overlap refusal and screen-change cleanup. Each
+saved and quit normally; owned PIDs, bridge ports and the Loom lock were gone.
+See the handover for the independently audited evidence and preserved failed
+attempts. A later production NeoForge 1.21.1 consumer reproduced the stale
+client/server hand and verified same-slot repair with complete inventory
+conservation. After the independent Node connection repair it also completed
+16 cold concurrent native server-block reads and genuine two-USE rope coupling
+with exactly one item consumed. Those consumer checks extend NeoForge 1.21.1
+evidence only. Its subsequent hoist attempt refused before motion; all final
+owned game processes closed normally, ports/Loom were clear. The Node transport
+repair changes no version-specific Java seam, protocol 1 or Bridge security.
+
 - **A dedicated dev server never exits.** Found by a mod that uses this one,
   on the first day it ran a 1.20.1 server, and then seen on every target:
   after `stop` the worlds are saved, the ports closed, and the JVM stays,

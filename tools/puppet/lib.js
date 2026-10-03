@@ -156,32 +156,55 @@ function parseSide(side) {
 /** One connection to one side of one game. Requests are numbered, so they may overlap. */
 class Connection {
   constructor(endpoint) {
-    this.endpoint = endpoint;
+    this.endpoint = { ...endpoint };
     this.socket = null;
+    this.connecting = null;
+    this.attempt = null;
     this.nextId = 1;
     this.waiting = new Map();
     this.buffer = "";
   }
 
   connect() {
-    if (this.socket) return Promise.resolve(this);
-    return new Promise((resolve, reject) => {
-      const socket = net.createConnection({ host: "127.0.0.1", port: this.endpoint.port }, () => {
-        this.socket = socket;
+    if (this.attempt && this.attempt.socket && this.attempt.socket.destroyed) this.close();
+    if (this.connecting) return this.connecting;
+    if (this.attempt && this.attempt.connected && this.socket && !this.socket.destroyed) {
+      return Promise.resolve(this);
+    }
+    let resolve, reject;
+    const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const attempt = { socket: null, connected: false, reject };
+    this.attempt = attempt;
+    this.connecting = promise;
+    this.buffer = "";
+    const fail = (failure) => {
+      if (this.attempt !== attempt) return;
+      this.attempt = null;
+      this.socket = null;
+      this.connecting = null;
+      this.buffer = "";
+      reject(failure);
+      this.failAll(failure);
+      if (attempt.socket) attempt.socket.destroy();
+    };
+    try {
+      const socket = net.createConnection({ host: "127.0.0.1", port: this.endpoint.port });
+      attempt.socket = this.socket = socket;
+      socket.once("connect", () => {
+        if (this.attempt !== attempt) return;
+        attempt.connected = true;
+        this.connecting = null;
         resolve(this);
       });
       socket.setNoDelay(true);
       socket.setEncoding("utf8");
-      socket.on("data", (chunk) => this.onData(chunk));
-      socket.on("error", (failure) => {
-        reject(failure);
-        this.failAll(failure);
-      });
-      socket.on("close", () => {
-        this.socket = null;
-        this.failAll(new Error("the game closed the connection"));
-      });
-    });
+      socket.on("data", (chunk) => { if (this.attempt === attempt) this.onData(chunk); });
+      socket.on("error", fail);
+      socket.on("close", () => fail(new Error("the game closed the connection")));
+    } catch (failure) {
+      fail(failure);
+    }
+    return promise;
   }
 
   onData(chunk) {
@@ -221,7 +244,12 @@ class Connection {
    *   that waits in the game should be given longer than its own timeout
    */
   async call(op, args = {}, timeoutMs = 60000) {
-    await this.connect();
+    const connecting = this.connect();
+    const attempt = this.attempt;
+    await connecting;
+    if (this.attempt !== attempt || !attempt.connected || attempt.socket.destroyed) {
+      throw new Error("the connection closed before the request was sent");
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -229,13 +257,28 @@ class Connection {
         reject(new Error(`no answer to ${op} within ${timeoutMs}ms`));
       }, timeoutMs);
       this.waiting.set(id, { resolve, reject, timer });
-      this.socket.write(JSON.stringify({ id, token: this.endpoint.token, op, args }) + "\n");
+      try {
+        attempt.socket.write(JSON.stringify({ id, token: this.endpoint.token, op, args }) + "\n");
+      } catch (failure) {
+        this.waiting.delete(id);
+        clearTimeout(timer);
+        reject(failure);
+      }
     });
   }
 
   close() {
-    if (this.socket) this.socket.destroy();
+    const attempt = this.attempt;
+    this.attempt = null;
     this.socket = null;
+    this.connecting = null;
+    this.buffer = "";
+    const failure = new Error("the connection was closed");
+    if (attempt) {
+      attempt.reject(failure);
+      if (attempt.socket) attempt.socket.destroy();
+    }
+    this.failAll(failure);
   }
 }
 
@@ -266,7 +309,9 @@ class Puppet {
     const wrong = mismatch(live);
     if (wrong) throw new Error(wrong);
     const held = this.connections.get(sideName);
-    if (held && held.endpoint.token === live.token && held.socket) return held;
+    if (held && held.endpoint.token === live.token && held.endpoint.port === live.port
+      && held.endpoint.protocol === live.protocol && held.endpoint.pid === live.pid
+      && sameDir(held.endpoint.dir, live.dir)) return held.connect();
     if (held) held.close();
     const fresh = new Connection(live);
     this.connections.set(sideName, fresh);
@@ -275,7 +320,14 @@ class Puppet {
 
   async call(side, op, args, timeoutMs) {
     const waits = args && args.timeout_ms ? Number(args.timeout_ms) + 10000 : undefined;
-    return (await this.side(side)).call(op, args || {}, timeoutMs || waits);
+    const finding = this.side(side);
+    const held = this.connections.get(side);
+    const attempt = held && held.attempt;
+    const connection = await finding;
+    if (connection !== held || this.connections.get(side) !== held || connection.attempt !== attempt) {
+      throw new Error("the connection closed before the request was sent");
+    }
+    return connection.call(op, args || {}, timeoutMs || waits);
   }
 
   close() {

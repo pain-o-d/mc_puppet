@@ -59,6 +59,7 @@ public final class PuppetClient {
             chat.add(false, message.getString());
             return CompoundEventResult.pass();
         });
+        ClientTickEvent.CLIENT_PRE.register(client -> InputSessions.tick());
         ClientTickEvent.CLIENT_POST.register(client -> waiter.tick());
 
         // Outside a development environment the person playing may not be the person who
@@ -79,8 +80,7 @@ public final class PuppetClient {
         ClientTickEvent.CLIENT_POST.register(client -> {
             boolean now = elsewhere(client);
             if (now && !wasElsewhere) {
-                net.minecraft.client.option.KeyBinding.unpressAll();
-                VirtualKeys.releaseAll();
+                InputSessions.releaseAll(client, "the client joined a server outside this machine");
                 LOGGER.warn("MC Puppet: this client has joined a server that is not on this machine. The bridge "
                         + "neither drives nor reads the game there; it answers again in a world of your own.");
             }
@@ -116,6 +116,7 @@ public final class PuppetClient {
             }
         });
         ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
+            InputSessions.releaseAll(client, "the client is stopping");
             waiter.abandon("the client is stopping");
             Bridge open = bridge;
             bridge = null;

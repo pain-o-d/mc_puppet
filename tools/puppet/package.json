@@ -43,6 +43,6 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test scenario.test.js"
+    "test": "node --test scenario.test.js launch.test.js connection.test.js"
   }
 }
