@@ -1,5 +1,14 @@
 # Handover
 
+## Now (2026-10-04)
+
+The short state; dated sections below are history. Rewrite this block, do
+not append to it, in the same commit as the change it describes.
+
+- **Works:** input, connections and build-lease handoff repaired on four targets (committed 2026-10-03/04).
+- **Open:** release 0.1.3 is the owner's; develop is ahead of `v0.1.2` by more than one feature.
+
+
 What a session opened in this project needs to know that the code and the git
 log do not say. Written 2026-09-22 from a session held in `../hivemind`, which
 did the work below because it needed it; keep it current in the same commit
