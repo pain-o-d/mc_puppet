@@ -1,11 +1,12 @@
 # Handover
 
-## Now (2026-10-04)
+## Now (2026-10-07)
 
 The short state; dated sections below are history. Rewrite this block, do
 not append to it, in the same commit as the change it describes.
 
 - **Works:** input, connections and build-lease handoff repaired on four targets (committed 2026-10-03/04).
+- **Next:** `docs/backlog.md` task 1, lifecycle events (server/client/launcher, filterable, file sink, `puppet wait`). Written, not started; slices 1A-1E there.
 - **Open:** release 0.1.3 is the owner's; develop is ahead of `v0.1.2` by more than one feature.
 
 
