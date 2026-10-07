@@ -64,7 +64,7 @@ function parseArgs(words) {
   const args = {};
   for (const word of words) {
     const at = word.indexOf("=");
-    if (at < 0) throw new Error(`arguments are key=value or one JSON object; got "${word}"`);
+    if (at < 0) throw new Error(`arguments are key=value or one JSON object; got "${word}", which has no "=". Write each as key=value, e.g. use: puppet server command command=stop (not: command stop)`);
     const raw = word.slice(at + 1);
     let value = raw;
     if (/^-?\d+(\.\d+)?$/.test(raw)) value = Number(raw);

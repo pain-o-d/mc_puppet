@@ -279,16 +279,27 @@ async function waitEvent({ dirs, want, failOn, timeoutMs, since, pollMs = 200 })
   const failing = explicit ? anyOf(failOn) : null;
   const watch = new Watch(dirs, since);
   const deadline = Date.now() + timeoutMs;
-  // Without --since, a file that already ends in process.exited when the wait starts is a finished
-  // run: its events are ignored until the file shows a newer one (a process.started, or a seq that
+  // Without --since, a file that already ends in process.exited (or, with no client.* event in it,
+  // in server.stopped: a dedicated server) when the wait starts is a finished run: its events are ignored until the file shows a newer one (a process.started, or a seq that
   // does not go on from where the old run stopped, as after a restart or a replaced file).
   const finished = new Map(); // file -> last seq of the finished run
   let first = true;
   const live = (batch) => {
     if (first && watch.since === null) {
       const last = new Map();
-      for (const each of batch) last.set(each.file, each);
-      for (const [file, each] of last) if (each.event.name === "process.exited") finished.set(file, Number(each.event.seq));
+      const clients = new Set(); // files with any client.* event: not a dedicated-server file
+      for (const each of batch) {
+        last.set(each.file, each);
+        if (String(each.event.name).startsWith("client.")) clients.add(each.file);
+      }
+      for (const [file, each] of last) {
+        const name = each.event.name;
+        // A dedicated server run by gradle has no launcher, so its file ends in server.stopped. A
+        // single-player file has client events and goes on to client.disconnected and process.exited.
+        if (name === "process.exited" || (name === "server.stopped" && !clients.has(file))) {
+          finished.set(file, Number(each.event.seq));
+        }
+      }
     }
     const initial = first;
     first = false;

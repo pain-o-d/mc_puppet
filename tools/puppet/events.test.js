@@ -145,6 +145,39 @@ test("waitEvent: a file that already ends in process.exited is a finished run an
   assert.equal(seen.event.seq, 2);
 });
 
+test("waitEvent: a dedicated server's file ending in server.stopped is a finished run; a single-player one is not", async () => {
+  const lines = (list) => list.map((each) => JSON.stringify(each)).join("\n") + "\n";
+  const dedicated = () => game([event(1, "server.starting"), event(2, "server.ready"), event(3, "server.stopped")]);
+  // The previous run's server.ready is not matched: exit 2.
+  const stale = dedicated();
+  const old = await events.waitEvent({ dirs: [stale.dir], want: "server.ready", timeoutMs: 300, pollMs: 20 });
+  assert.equal(old.code, 2);
+  // A fresh run replaces the file (seq restarts): its server.ready matches.
+  const replaced = dedicated();
+  setTimeout(() => fs.writeFileSync(replaced.file, lines([event(1, "server.starting")])), 100);
+  setTimeout(() => fs.appendFileSync(replaced.file, lines([event(2, "server.ready")])), 250);
+  const fresh = await events.waitEvent({ dirs: [replaced.dir], want: "server.ready", timeoutMs: 10000, pollMs: 20 });
+  assert.equal(fresh.code, 0);
+  assert.equal(fresh.event.seq, 2);
+  // A single-player file has client events: ending in server.stopped is not "finished" for the new clause.
+  const single = game([event(1, "process.started"), event(2, "client.ready", {}, "client"), event(3, "server.ready"), event(4, "server.stopped")]);
+  const live = await events.waitEvent({ dirs: [single.dir], want: "server.ready", timeoutMs: 5000, pollMs: 20 });
+  assert.equal(live.code, 0);
+  assert.equal(live.event.seq, 3);
+  // --since is unchanged: what is in the dedicated file counts.
+  const since = dedicated();
+  const seen = await events.waitEvent({ dirs: [since.dir], want: "server.ready", since: 0, timeoutMs: 5000 });
+  assert.equal(seen.code, 0);
+  assert.equal(seen.event.seq, 2);
+});
+
+test("puppet: a word without = is refused with the working form", () => {
+  const { dir } = game([]);
+  const result = run(["--dir", dir, "server", "command", "stop"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /puppet server command command=stop/);
+});
+
 test("waitEvent: after a finished run, a newer run in the same file matches (seq restarts or a new process.started)", async () => {
   const restart = game([event(1, "process.started"), event(2, "client.ready", {}, "client"), event(3, "process.exited", { code: 0 })]);
   const lines = (list) => list.map((each) => JSON.stringify(each)).join("\n") + "\n";

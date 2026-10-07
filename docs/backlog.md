@@ -6,7 +6,7 @@ number for life; other documents cite it. State lives in `handover.md`
  **Done** 2026-10-07: `ClientEvents`, `ClientCompat` twins, `DisconnectedScreenAccessor`, both builds green.
 ## Task 1 — Lifecycle events: a pushed, filterable record of what the game and server did
 
-Status: **open**, written 2026-10-07. Owner: nobody. Ordering: 1 first;
+Status: **done** 2026-10-07 (slices 1A-1E, seen running on Fabric 1.21.1; see task 6). Owner: nobody. Ordering: 1 first;
 2, 3 and 4 are independent after it (disjoint write areas); 5 last.
 
 ### Why
@@ -216,7 +216,7 @@ Status: **done** 2026-10-07 (Fabric 1.21.1, `events.enabled=["*"]`, config resto
 
 ## Task 9 — Stale file after a dedicated-server run
 
-Status: **open**, 2026-10-07. Found in task 6: `puppet wait --event server.ready` issued right after a launch returned at once with the previous run's line, because the file is emptied only when the new run starts. Task 7's guard covers only a file ending in `process.exited`; a dedicated server started by `runServer` ends with `server.stopped` and no `process.exited`. Decide: treat a last event `server.stopped` as finished too, or have `wait` read the file's run mtime/pid. Add a test; keep `--since` unchanged.
+Status: **done** 2026-10-07: `wait` without `--since` also treats a file ending in `server.stopped` with no `client.*` event as a finished run (dedicated server); single-player files are unaffected; `--since` and exit codes unchanged; test added. Also `puppet server command stop` now refuses in words and shows `command=stop` (test added). `npm test` 106/106, check-twins 0, all four `:common:test` and jar builds green (a one-off Windows `@TempDir` cleanup failure in `EventsTest` did not repeat in two reruns). Found in task 6: `puppet wait --event server.ready` issued right after a launch returned at once with the previous run's line, because the file is emptied only when the new run starts. Task 7's guard covers only a file ending in `process.exited`; a dedicated server started by `runServer` ends with `server.stopped` and no `process.exited`. Decide: treat a last event `server.stopped` as finished too, or have `wait` read the file's run mtime/pid. Add a test; keep `--since` unchanged.
 
 ## Task 7 — Stale events.jsonl match in `puppet wait`
 
