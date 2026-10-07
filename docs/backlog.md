@@ -208,7 +208,7 @@ Result 2026-10-07, second run (owner asked for a full check; Fabric 1.21.1 with 
 - Findings (no bug): `puppet wait --event client.ready` returns 0 at once if the old events.jsonl of a finished run is still there (stale match) — decide whether launch or wait should guard with --since; scenarios focused-input and trade-with-a-villager need a flat structures:false world, say so in their text.
 - Still open and owner-gated: NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1; two-clients-one-server (needs two clients).
 
-Result 2026-10-08 (owner allowed the agent to run games): all PASS, no bug. Task 9 live on Fabric 1.21.1 dedicated server: `wait --event server.ready` right after a new `runServer` returned the new run's seq 1, not the old line. NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 each: events seq 1-6 (process.started, client.ready, server.ready, client.connected, client.disconnected, process.exited code 0), flat world structures=false, wait-for-the-world 2/2, focused-input 59/59, eyes-and-hands 47/47, mouse-drag 39/39, trade-with-a-villager 24/24, leave_world and quit clean, no orphan java. Not run: `two-clients-one-server`, `prod-check.js` on the other jars, a launcher client.
+Result 2026-10-08 (owner allowed the agent to run games): all PASS, no bug. Task 9 live on Fabric 1.21.1 dedicated server: `wait --event server.ready` right after a new `runServer` returned the new run's seq 1, not the old line. NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 each: events seq 1-6 (process.started, client.ready, server.ready, client.connected, client.disconnected, process.exited code 0), flat world structures=false, wait-for-the-world 2/2, focused-input 59/59, eyes-and-hands 47/47, mouse-drag 39/39, trade-with-a-villager 24/24, leave_world and quit clean, no orphan java. `two-clients-one-server` PASS live 2026-10-08 (Fabric 1.21.1; see task 10). Not run: `prod-check.js` on the other jars, a launcher client.
 
 ## Task 6 — Prove player.joined/left and server.stopping/stopped with events.enabled=["*"]
 
@@ -225,3 +225,7 @@ Status: **done** 2026-10-07 (uncommitted at writing). `puppet wait` without `--s
 ## Task 8 — Document flat-world requirement in scenarios
 
 Status: **done** 2026-10-07. The `about` of `scenarios/focused-input.json` and `scenarios/trade-with-a-villager.json` now says the flat world has structures disabled.
+
+## Task 10 — `puppet wait` / `puppet events` cannot pick one named client
+
+Status: **open**, 2026-10-08. Found live (Fabric 1.21.1, `two-clients-one-server` PASS with `launch client --name bot1,bot2`): each client writes its own `fabric/runs/<name>/events.jsonl`, the server `fabric/run/events.jsonl`. Without `--dir`, `wait`/`events` scan every run dir and merge them, so a bare `wait --event client.connected` can be satisfied by the other client. Only workaround: `--dir fabric/runs/bot2` (repeatable, also `MC_PUPPET_DIRS`). `--name` filters event names, not clients. Proposal: `--client bot2` meaning `runs/bot2` (as `client@bot2` already does for ops), a README line, a test in `events.test.js`; the multi-file default stays. Also seen: quitting a client while connected ends with `process.exited` and no `client.disconnected`; decide if that is intended and say so in the README.

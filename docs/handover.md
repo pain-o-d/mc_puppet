@@ -9,7 +9,7 @@ not append to it, in the same commit as the change it describes.
 - **Seen running (2026-10-07, Fabric 1.21.1 world run):** events.jsonl seq 1-5 (process.started, client.ready, server.ready, client.connected, client.disconnected); scenarios passed (wait-for-the-world 2/2, eyes-and-hands, mouse-drag, focused-input 59/59, trade-with-a-villager 24/24); held input stop/release, break_block and hotbar repair all passed; dedicated server started/stopped cleanly. Task 6 with `events.enabled=["*"]`: player.joined/left and server.stopping/stopped all reached the file, shutdown ones too. Tasks 6-8 done.
 - **Front:** none (tasks 1-9 done; task 5 done on all four dev targets 2026-10-08).
 - **Uncommitted:** nothing.
-- **Next:** `two-clients-one-server`, `prod-check.js` on the other three jars, a client from a real launcher (owner-gated); then release 0.1.3.
+- **Next:** task 10 (`--client` for `wait`/`events`); `prod-check.js` on the other three jars, a client from a real launcher (owner-gated); then release 0.1.3. `two-clients-one-server` seen passing 2026-10-08 on Fabric 1.21.1.
 - **Owner:** release 0.1.3, and a live run of the events; develop is ahead of `v0.1.2` by more than one feature.
 
 What a session opened in this project needs to know that the code and the git
