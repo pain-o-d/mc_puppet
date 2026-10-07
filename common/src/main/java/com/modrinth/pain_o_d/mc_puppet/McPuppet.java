@@ -74,6 +74,13 @@ public final class McPuppet {
     }
 
     public static void init() {
+        if (Boolean.getBoolean("mc_puppet.pretend_production")) {
+            // A hint only: nothing here changes what the rules decide. Such a game has no bridge,
+            // so nothing can ask it to quit.
+            LOGGER.warn("MC Puppet: -Dmc_puppet.pretend_production=true is set. The bridge is "
+                    + "intentionally OFF in this run, so no test can drive or quit it: close the "
+                    + "game window by hand.");
+        }
         PuppetConfig config = PuppetConfig.load(Platform.getConfigFolder(), development(),
                 Platform.getGameFolder(), com.modrinth.pain_o_d.mc_puppet.core.Consent.home());
         if (config.refusedForWantOfConsent()) {

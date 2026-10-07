@@ -166,8 +166,9 @@ when they differ where they should not. Run by `tools/build-all.sh`.
 
 ## Task 4 — A client started with `pretend_production` has no exit of its own
 
-Status: **open, waits for the owner**, written 2026-10-07. Not to be started
-without a decision.
+Status: **done 2026-10-07**: owner decision, a hint only. `McPuppet.init` logs
+one WARN saying the bridge is intentionally off and the window must be closed
+by hand; no auto-exit, no window title, no change to the bridge or consent code.
 
 Such a client has no bridge, so nothing can ask it to quit; it must be closed
 by hand (see `McPuppet.java`, around lines 44 to 49, and CLAUDE.md). Whether it

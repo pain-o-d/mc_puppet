@@ -5,6 +5,7 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
+- A game started with `-Dmc_puppet.pretend_production=true` logs one warning that its bridge is intentionally off and the window must be closed by hand.
 - Lifecycle events: server and client hooks (server started/stopping/stopped/crash, client connecting/connected/connect_failed/disconnected/crash, player joined/left) feed the events bus.
 - Temporal client input has one scoped owner; stop, release, context changes
   and timeout revoke pending callbacks and clear owned held/queued presses.

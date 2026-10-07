@@ -160,7 +160,9 @@ after it rests on it.
       `mod_version` both say 0.1.2, CHANGELOG has `## 0.1.2`) and on GitHub, and
       submitted to Modrinth (`mc-puppet`), which is also its Maven. Corrected
       2026-10-07 from the repository's own files; the registries were not queried.
-- [ ] An exit of its own for a client started with `pretend_production`.
+- [x] A client started with `pretend_production` has no bridge and is closed by
+      hand; a WARN line in the log says so (a hint only, by the owner's decision
+      of 2026-10-07, not an exit of its own).
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
 

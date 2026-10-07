@@ -86,6 +86,8 @@ around them.
 | `ClientCompat.openWorld` / `createWorld` | a parent screen first; no parent | a cancel callback; a parent |
 | `ClientCompat.joinServer` | `gui.screen.ConnectScreen`, a `ServerInfo` that is or is not local | `gui.screen.multiplayer`, a server type, and a cookie store to pass |
 | `ClientCompat.isConnecting` | `gui.screen.ConnectScreen` | `gui.screen.multiplayer.ConnectScreen`; the lifecycle events use it to tell a connect that failed from one that is still going |
+| `mixin/compat/DisconnectedScreenAccessor` | reads `reason: Text` | reads `info: DisconnectionInfo` |
+| `ClientCompat.disconnectReason` | the accessor's `Text`, as a string | `info().reason()` of the accessor's `DisconnectionInfo`, as a string; the lifecycle events use it for what a disconnect said |
 | `ClientCompat.onSound` | two arguments | three |
 | `ClientCompat.sidebarOf` / `linesOf` | slot 1, `ScoreboardPlayerScore` | an enum, `ScoreboardEntry` |
 
