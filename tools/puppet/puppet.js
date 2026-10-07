@@ -48,6 +48,7 @@
  *   --event <a,b>     wait: the event names wanted ("*" is a wildcard: client.*, *.crash)
  *   --fail-on <a,b>   wait: events that end the wait in failure (replaces the default list)
  *   --since <n>       events, wait: only events with a sequence number above n
+ *   --client <name>   events, wait: only the events file of the client launched with --name (its runs/<name>); not with --dir
  *   --follow          events: keep printing what arrives
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
@@ -75,6 +76,11 @@ function parseArgs(words) {
   return args;
 }
 
+/** --client names a game by its run directory; --dir names a place. Both would say where to look twice. */
+function refuseClientWithDir(client, dirs) {
+  if (client !== null && dirs.length) throw new Error("--client and --dir both say where to look; use one: --client NAME for the client launched with --name NAME, or --dir for a game directory");
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const dirs = [];
@@ -85,6 +91,7 @@ async function main() {
   let updateGolden = false;
   let follow = false;
   let since = null;
+  let clientName = null;
   let wantEvent = null;
   let failOn = null;
   const launchOptions = { project: ".", loader: "fabric", world: null, server: null, name: null, username: null,
@@ -99,6 +106,7 @@ async function main() {
     else if (argv[index] === "--update-golden") updateGolden = true;
     else if (argv[index] === "--follow") follow = true;
     else if (argv[index] === "--since") since = Number(argv[++index]);
+    else if (argv[index] === "--client") clientName = argv[++index];
     else if (argv[index] === "--event") wantEvent = argv[++index];
     else if (argv[index] === "--fail-on") failOn = argv[++index];
     else if (argv[index] === "--project") launchOptions.project = argv[++index];
@@ -157,12 +165,14 @@ async function main() {
       return 0;
     }
     if (first === "events") {
+      refuseClientWithDir(clientName, dirs);
       // Lifecycle events (docs/backlog.md, task 1): one line per event, for `tail -f` and Monitor.
-      await events.showEvents({ dirs, since, only: launchOptions.name, follow, emit: (line) => console.log(line) });
+      await events.showEvents({ dirs, client: clientName, since, only: launchOptions.name, follow, emit: (line) => console.log(line) });
       return 0;
     }
     if (first === "wait") {
-      const result = await events.waitEvent({ dirs, want: wantEvent, failOn, since, timeoutMs: launchOptions.timeout * 1000 });
+      refuseClientWithDir(clientName, dirs);
+      const result = await events.waitEvent({ dirs, client: clientName, want: wantEvent, failOn, since, timeoutMs: launchOptions.timeout * 1000 });
       if (result.line) console.log(result.line);
       else console.error("puppet: " + result.reason);
       return result.code;

@@ -58,20 +58,39 @@ function cut(value) {
  * each looked for in the usual run folders and under runs/<name>, whether or not a game is
  * still listening. Only files that exist.
  */
-function eventFiles(dirs) {
-  const roots = (dirs && dirs.length ? dirs : (process.env.MC_PUPPET_DIRS || ".").split(/[;]/))
-    .map((dir) => dir.trim()).filter(Boolean).map(lib.named);
+function eventFiles(dirs, client) {
   const found = [];
   const seen = new Set();
-  for (const { game, root } of roots) {
-    for (const { dir } of lib.placesUnder(root, game)) {
-      const file = eventsFile(dir);
-      if (seen.has(file) || !fs.existsSync(file)) continue;
-      seen.add(file);
-      found.push(file);
-    }
+  for (const dir of placesFor(dirs, client)) {
+    const file = eventsFile(dir);
+    if (seen.has(file) || !fs.existsSync(file)) continue;
+    seen.add(file);
+    found.push(file);
   }
   return found;
+}
+
+/** Every directory a game may be in; with a client name, only the runs/<name> ones. Found or not. */
+function placesFor(dirs, client) {
+  const roots = (dirs && dirs.length ? dirs : (process.env.MC_PUPPET_DIRS || ".").split(/[;]/))
+    .map((dir) => dir.trim()).filter(Boolean).map(lib.named);
+  const places = [];
+  for (const { game, root } of roots) {
+    for (const { dir } of lib.placesUnder(root, game)) {
+      if (client && !(path.basename(dir) === client && path.basename(path.dirname(dir)) === "runs")) continue;
+      places.push(dir);
+    }
+  }
+  return places;
+}
+
+/** For --client NAME: refuses, in words, when no run directory of that name exists anywhere. */
+function requireClient(dirs, client) {
+  if (!client) return;
+  if (placesFor(dirs, client).some((dir) => fs.existsSync(dir))) return;
+  const where = dirs && dirs.length ? dirs.join(", ") : (process.env.MC_PUPPET_DIRS || "the current directory");
+  throw new Error(`no run directory for client "${client}" was found: looked for runs/${client} in ., fabric, neoforge and forge under ${where}. ` +
+    `Start it with: puppet launch client --name ${client}`);
 }
 
 /** Every event line of a file, in order; a half-written or foreign line is skipped. */
@@ -242,14 +261,15 @@ class Tail {
 
 /** New events from every file there is now, files that appear later included, oldest first by time. */
 class Watch {
-  constructor(dirs, since) {
+  constructor(dirs, since, client) {
+    this.client = client || null;
     this.dirs = dirs;
     this.since = since === undefined || since === null ? null : Number(since);
     this.tails = new Map();
   }
 
   poll() {
-    for (const file of eventFiles(this.dirs)) if (!this.tails.has(file)) this.tails.set(file, new Tail(file));
+    for (const file of eventFiles(this.dirs, this.client)) if (!this.tails.has(file)) this.tails.set(file, new Tail(file));
     const fresh = [];
     for (const tail of this.tails.values()) {
       for (const each of tail.read()) {
@@ -272,12 +292,13 @@ class Watch {
  * @returns {Promise<{code: 0|1|2, event: object|null, line: string|null, reason: string}>}
  *   code 0 wanted, 1 failure, 2 timeout
  */
-async function waitEvent({ dirs, want, failOn, timeoutMs, since, pollMs = 200 }) {
+async function waitEvent({ dirs, client, want, failOn, timeoutMs, since, pollMs = 200 }) {
   const wanted = anyOf(want);
   if (names(want).length === 0) throw new Error("wait needs an event to wait for: --event NAME[,NAME]");
   const explicit = names(failOn).length > 0;
   const failing = explicit ? anyOf(failOn) : null;
-  const watch = new Watch(dirs, since);
+  requireClient(dirs, client);
+  const watch = new Watch(dirs, since, client);
   const deadline = Date.now() + timeoutMs;
   // Without --since, a file that already ends in process.exited (or, with no client.* event in it,
   // in server.stopped: a dedicated server) when the wait starts is a finished run: its events are ignored until the file shows a newer one (a process.started, or a seq that
@@ -332,9 +353,10 @@ async function waitEvent({ dirs, want, failOn, timeoutMs, since, pollMs = 200 })
  * The lines of the files, filtered, and with follow true, the lines that come after, until stopped.
  * `emit` is called with each raw line.
  */
-async function showEvents({ dirs, since, only, follow, emit, stop = () => false, pollMs = 200 }) {
+async function showEvents({ dirs, client, since, only, follow, emit, stop = () => false, pollMs = 200 }) {
   const wanted = names(only).length ? anyOf(only) : () => true;
-  const watch = new Watch(dirs, since);
+  requireClient(dirs, client);
+  const watch = new Watch(dirs, since, client);
   for (;;) {
     for (const { event, line } of watch.poll()) if (wanted(event.name)) emit(line);
     if (!follow || stop()) return;
@@ -343,6 +365,6 @@ async function showEvents({ dirs, since, only, follow, emit, stop = () => false,
 }
 
 module.exports = {
-  eventsFile, eventFiles, readEvents, appendEvent, resetEvents, ensureStarted, newestCrashReport,
+  eventsFile, eventFiles, requireClient, readEvents, appendEvent, resetEvents, ensureStarted, newestCrashReport,
   Tail, Watch, waitEvent, showEvents, matcher, names, defaultFailure, MAX_TEXT,
 };

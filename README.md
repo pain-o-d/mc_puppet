@@ -572,7 +572,7 @@ events file. Without `--fail-on` the failures are any `*.crash`, any
 replaces that list. `--since N` ignores events up to sequence N, `--dir` picks
 the project. Without `--since`, an events file whose last line is `process.exited`
 is a finished run: `wait` ignores its events (a leftover `client.ready` does not
-match) and goes on waiting for a newer run in it, until the timeout (exit 2); so is a file of a dedicated server (no `client.*` event in it) whose last line is `server.stopped`. `puppet events` takes `--since`, `--name a,b` and `--follow`.
+match) and goes on waiting for a newer run in it, until the timeout (exit 2); so is a file of a dedicated server (no `client.*` event in it) whose last line is `server.stopped`. `puppet events` takes `--since`, `--name a,b` and `--follow`. With several clients running (`launch client --name bot1,bot2`) both take `--client NAME`: only the events file of the client started under that name (`runs/NAME/`), not the server's and not another client's; it is refused with `--dir`, and when no run directory of that name exists the answer names the places looked in.
 
 In a scenario the same wait is a step, `{"wait_event": "client.connected",
 "fail_on": "*.crash", "timeout": 60}` (also `since`, `save`, `show`); a failure

@@ -399,3 +399,47 @@ test("a scenario's wait_event step passes on a wanted event, fails at once on a 
   assert.equal(late.ok, false);
   assert.match(late.steps[0].problems[0], /timed out/);
 });
+
+test("--client picks the events file of that client only, not the server's nor another client's", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "puppet-events-client-"));
+  const write = (dir, lines) => {
+    const file = events.eventsFile(dir);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, lines.map((each) => JSON.stringify(each)).join("\n") + "\n");
+  };
+  write(path.join(root, "fabric", "run"), [event(1, "server.ready")]);
+  write(path.join(root, "fabric", "runs", "bot1"), [event(1, "client.starting", {}, "client"), event(2, "client.connected", { who: "bot1" }, "client")]);
+  write(path.join(root, "fabric", "runs", "bot2"), [event(1, "client.starting", {}, "client"), event(2, "client.disconnected", { who: "bot2" }, "client")]);
+  const files = (client) => events.eventFiles([root], client).map((file) => path.relative(root, file).split(path.sep).join("/"));
+  assert.deepEqual(files("bot2"), ["fabric/runs/bot2/events.jsonl"].map((each) => path.relative(root, events.eventsFile(path.join(root, "fabric", "runs", "bot2"))).split(path.sep).join("/")));
+  assert.equal(files(undefined).length, 3, "without --client everything is merged");
+
+  const waited = run(["--dir", root, "wait", "--event", "client.*", "--timeout", "5"]);
+  assert.equal(waited.status, 0, waited.stderr);
+  const bot2 = run(["wait", "--client", "bot2", "--event", "client.connected,client.disconnected", "--timeout", "5"], { cwd: root });
+  assert.equal(bot2.status, 0, bot2.stderr);
+  assert.equal(JSON.parse(bot2.stdout.trim()).data.who, "bot2");
+  const none = run(["wait", "--client", "bot2", "--event", "server.ready", "--timeout", "0.3"], { cwd: root });
+  assert.equal(none.status, 2, "the server's event is not seen through --client");
+  const shown = run(["events", "--client", "bot1"], { cwd: root });
+  assert.equal(shown.status, 0, shown.stderr);
+  assert.deepEqual(shown.stdout.trim().split("\n").map((line) => JSON.parse(line).name), ["client.starting", "client.connected"]);
+});
+
+test("--client with a name that has no run directory is refused in words, naming the places", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "puppet-events-noclient-"));
+  const result = run(["wait", "--client", "ghost", "--event", "client.connected", "--timeout", "5"], { cwd: root });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /no run directory for client "ghost"/);
+  assert.match(result.stderr, /runs\/ghost/);
+  assert.notEqual(run(["events", "--client", "ghost"], { cwd: root }).status, 0);
+});
+
+test("--client together with --dir is refused: use one", () => {
+  const { dir } = game([event(1, "server.ready")]);
+  for (const command of [["wait", "--event", "server.ready", "--timeout", "5"], ["events"]]) {
+    const result = run(["--dir", dir, "--client", "bot1", ...command]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /use one/);
+  }
+});
