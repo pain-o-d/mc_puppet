@@ -187,3 +187,16 @@ Scenarios for: stopping and releasing held input; `break_block`; repairing a
 hotbar hand. And `tools/prod-check.js` beyond the one case it was seen on
 (NeoForge 1.21.1): the Forge 1.20.1 jar, the two Fabric jars, and a client
 started from a launcher.
+
+Result 2026-10-07 (owner: menu only, no world):
+- Fabric 1.21.1: **partly done**, main menu only. Seen: `events.jsonl` seq 1
+  `process.started`, 2 `client.ready`, 3 `process.exited` (code 0) — monotonic;
+  `puppet events` and `puppet wait --event client.ready --timeout 120` exit 0;
+  `puppet client quit` ended the process. No `client.starting` event exists
+  (the names are those three). `wait-for-the-world.json` failed at step 1 (timed
+  out after 120s waiting for `client.connected`) because no world was joined,
+  as expected from the menu, not a defect.
+- Not run: needs a world — held-input stop/release, `break_block`, hotbar hand
+  repair, `focused-input`, `eyes-and-hands`, `mouse-drag`, `trade-with-a-villager`,
+  `wait-for-the-world` beyond step 1; `two-clients-one-server` needs more than one client.
+- NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1: still open, owner-gated.

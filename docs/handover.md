@@ -6,10 +6,10 @@ The short state; dated sections below are history. Rewrite this block, do
 not append to it, in the same commit as the change it describes.
 
 - **Works:** lifecycle events (backlog task 1, slices 1A-1E): `Events` bus, server/client/crash hooks, launcher `process.started/exited`, op `lifecycle`, `puppet wait`/`events` (exit 0 event, 1 failure, 2 timeout or no file), scenario step `wait_event`. Tasks 2 and 3 done. Both builds and unit tests pass.
-- **Unverified:** no event was seen firing in a real game; `scenarios/wait-for-the-world.json` was not run.
-- **Front:** `front: mc_puppet 1, Claude, 2026-10-07` cleared (slice 1E, docs, written).
-- **Uncommitted:** all of task 1's code, tests, README, MULTIVERSION, ROADMAP, backlog and this file.
-- **Next:** commit; tasks 4 and 5 are open and owner-gated.
+- **Seen running (2026-10-07, Fabric 1.21.1, main menu only):** `events.jsonl` got `process.started`, `client.ready`, `process.exited` (seq 1-3); `puppet events`, `puppet wait --event client.ready` exit 0; `puppet client quit` closed the game. **Not seen:** any event with a world (`client.connected`, server, crash), `wait-for-the-world.json` past step 1, held input, `break_block`, hotbar repair (task 5); the other three targets.
+- **Front:** none (tasks 1-4 done and committed; task 5 partly done).
+- **Uncommitted:** nothing.
+- **Next:** task 5 rest: a world run on Fabric 1.21.1, then NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 (owner-gated).
 - **Owner:** release 0.1.3, and a live run of the events; develop is ahead of `v0.1.2` by more than one feature.
 
 What a session opened in this project needs to know that the code and the git
