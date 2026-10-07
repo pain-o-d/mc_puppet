@@ -279,8 +279,31 @@ async function waitEvent({ dirs, want, failOn, timeoutMs, since, pollMs = 200 })
   const failing = explicit ? anyOf(failOn) : null;
   const watch = new Watch(dirs, since);
   const deadline = Date.now() + timeoutMs;
+  // Without --since, a file that already ends in process.exited when the wait starts is a finished
+  // run: its events are ignored until the file shows a newer one (a process.started, or a seq that
+  // does not go on from where the old run stopped, as after a restart or a replaced file).
+  const finished = new Map(); // file -> last seq of the finished run
+  let first = true;
+  const live = (batch) => {
+    if (first && watch.since === null) {
+      const last = new Map();
+      for (const each of batch) last.set(each.file, each);
+      for (const [file, each] of last) if (each.event.name === "process.exited") finished.set(file, Number(each.event.seq));
+    }
+    const initial = first;
+    first = false;
+    if (finished.size === 0) return batch;
+    return batch.filter((each) => {
+      if (!finished.has(each.file)) return true;
+      if (initial) return false;
+      const seq = Number(each.event.seq);
+      if (each.event.name !== "process.started" && seq > finished.get(each.file)) return false;
+      finished.delete(each.file);
+      return true;
+    });
+  };
   for (;;) {
-    for (const { event, line } of watch.poll()) {
+    for (const { event, line } of live(watch.poll())) {
       if (wanted(event.name)) return { code: 0, event, line, reason: `${event.name} arrived` };
       if (explicit ? failing(event.name) : defaultFailure(event)) {
         return { code: 1, event, line, reason: `${event.name} arrived, which ends the wait in failure` };

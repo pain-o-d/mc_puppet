@@ -216,8 +216,8 @@ Status: **open**, Fabric 1.21.1 client and dedicated server; 2026-10-07.
 
 ## Task 7 — Stale events.jsonl match in `puppet wait`
 
-Status: **open**, decide whether launch or wait should guard with --since; 2026-10-07.
+Status: **done** 2026-10-07 (uncommitted at writing). `puppet wait` without `--since` ignores the events of a file whose last event is `process.exited` until a newer run appears (`process.started`, or seq not above the old last seq); `--since` unchanged; exit codes 0/1/2 unchanged. 5 new tests in `events.test.js`; `npm test` 104/104; `check-twins` exit 0. README `puppet wait` paragraph updated.
 
 ## Task 8 — Document flat-world requirement in scenarios
 
-Status: **open**, focused-input and trade-with-a-villager need structures:false; 2026-10-07.
+Status: **done** 2026-10-07. The `about` of `scenarios/focused-input.json` and `scenarios/trade-with-a-villager.json` now says the flat world has structures disabled.

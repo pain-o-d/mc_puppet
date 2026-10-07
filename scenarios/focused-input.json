@@ -1,6 +1,6 @@
 {
   "name": "ordinary focused hold and vanilla hotbar synchronization",
-  "about": "Run in a disposable flat world with player Puppet and the existing server bridge. Uses ordinary survival input while real focus is false; supplies only finite test blocks/items. Tests different/already-selected/empty/clamped hotbar with independent server readback and unchanged inventory, vanilla wool mining/tool wear, normal slow incorrect-tool stone behavior, bow USE, movement and screen/parse refusal. No server selection write or fabricated slot packet. Concurrent stop/release/context cancellation and stale-cache reconnect require separate supervised API tests; this serial scenario does not claim them. Runs on 1.20.1 and 1.21.1.",
+  "about": "Run in a disposable flat world (structures disabled) with player Puppet and the existing server bridge. Uses ordinary survival input while real focus is false; supplies only finite test blocks/items. Tests different/already-selected/empty/clamped hotbar with independent server readback and unchanged inventory, vanilla wool mining/tool wear, normal slow incorrect-tool stone behavior, bow USE, movement and screen/parse refusal. No server selection write or fabricated slot packet. Concurrent stop/release/context cancellation and stale-cache reconnect require separate supervised API tests; this serial scenario does not claim them. Runs on 1.20.1 and 1.21.1.",
   "setup": [
     {"op":"stop"},
     {"op":"close_screen","optional":true},

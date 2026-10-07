@@ -123,8 +123,43 @@ test("waitEvent: a crash ends the wait in failure before the timeout; so does a 
   assert.equal(result.code, 1);
   assert.equal(result.event.name, "server.crash");
   assert.ok(Date.now() - started < 5000, "did not sleep to the timeout");
-  const killed = game([event(1, "process.started"), event(2, "process.exited", { code: 137 })]);
-  assert.equal((await events.waitEvent({ dirs: [killed.dir], want: "server.ready", timeoutMs: 30000 })).code, 1);
+  // The exit is seen when it happens during the wait (a file already ending in it is a finished run).
+  const killed = game([event(1, "process.started")]);
+  setTimeout(() => fs.appendFileSync(killed.file, JSON.stringify(event(2, "process.exited", { code: 137 })) + "\n"), 100);
+  assert.equal((await events.waitEvent({ dirs: [killed.dir], want: "server.ready", timeoutMs: 30000, pollMs: 20 })).code, 1);
+});
+
+test("waitEvent: a file that already ends in process.exited is a finished run and is ignored without --since", async () => {
+  const done = () => game([event(1, "process.started"), event(2, "client.ready", {}, "client"), event(3, "process.exited", { code: 0 })]);
+  const stale = done();
+  const old = await events.waitEvent({ dirs: [stale.dir], want: "client.ready", timeoutMs: 300, pollMs: 20 });
+  assert.equal(old.code, 2);
+  assert.match(old.reason, /timed out/);
+  // Even a non-zero exit of a finished run is not a failure of the wait that starts after it.
+  const crashed = game([event(1, "process.started"), event(2, "process.exited", { code: 137 })]);
+  assert.equal((await events.waitEvent({ dirs: [crashed.dir], want: "client.ready", timeoutMs: 300, pollMs: 20 })).code, 2);
+  // With --since the old behaviour stays: what is in the file counts.
+  const since = done();
+  const seen = await events.waitEvent({ dirs: [since.dir], want: "client.ready", since: 0, timeoutMs: 5000 });
+  assert.equal(seen.code, 0);
+  assert.equal(seen.event.seq, 2);
+});
+
+test("waitEvent: after a finished run, a newer run in the same file matches (seq restarts or a new process.started)", async () => {
+  const restart = game([event(1, "process.started"), event(2, "client.ready", {}, "client"), event(3, "process.exited", { code: 0 })]);
+  const lines = (list) => list.map((each) => JSON.stringify(each)).join("\n") + "\n";
+  // The old run's lines are not matched; the new run's are, here after the file is replaced.
+  setTimeout(() => fs.writeFileSync(restart.file, lines([event(1, "process.started"), event(2, "client.starting", {}, "client")])), 100);
+  setTimeout(() => fs.appendFileSync(restart.file, lines([event(3, "client.ready", {}, "client")])), 250);
+  const result = await events.waitEvent({ dirs: [restart.dir], want: "client.ready", timeoutMs: 10000, pollMs: 20 });
+  assert.equal(result.code, 0);
+  assert.equal(result.event.seq, 3);
+  // Appended to the old file with a new process.started.
+  const appended = game([event(1, "process.started"), event(2, "client.ready", {}, "client"), event(3, "process.exited", { code: 0 })]);
+  setTimeout(() => fs.appendFileSync(appended.file, lines([event(4, "process.started"), event(5, "client.ready", {}, "client")])), 100);
+  const next = await events.waitEvent({ dirs: [appended.dir], want: "client.ready", timeoutMs: 10000, pollMs: 20 });
+  assert.equal(next.code, 0);
+  assert.equal(next.event.seq, 5);
 });
 
 test("waitEvent: a clean exit is not a failure; --fail-on replaces the default list", async () => {

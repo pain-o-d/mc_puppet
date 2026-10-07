@@ -1,6 +1,6 @@
 {
   "name": "buy apples from a farmer, and have both sides of the game agree about it",
-  "about": "Run in a creative flat world with the player called Puppet standing still. Summons its own farmer and cleans up after itself, whether it passed or not. Nothing here waits for a number of ticks: every wait is for the thing itself. Runs on 1.20.1 and 1.21.1: the one command that names an item with a count is written both ways.",
+  "about": "Run in a creative flat world (structures disabled) with the player called Puppet standing still. Summons its own farmer and cleans up after itself, whether it passed or not. Nothing here waits for a number of ticks: every wait is for the thing itself. Runs on 1.20.1 and 1.21.1: the one command that names an item with a count is written both ways.",
   "setup": [
     {"side":"server","op":"command","note":"a clean slate","args":{"command":"kill @e[type=minecraft:villager,distance=..8]","as":"Puppet"}},
     {"side":"server","op":"command","args":{"command":"clear Puppet"}},

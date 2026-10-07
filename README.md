@@ -570,7 +570,9 @@ arrived, **1** when a failure event did, **2** on timeout or when there is no
 events file. Without `--fail-on` the failures are any `*.crash`, any
 `*.connect_failed` and a `process.exited` with a non-zero code; `--fail-on`
 replaces that list. `--since N` ignores events up to sequence N, `--dir` picks
-the project. `puppet events` takes `--since`, `--name a,b` and `--follow`.
+the project. Without `--since`, an events file whose last line is `process.exited`
+is a finished run: `wait` ignores its events (a leftover `client.ready` does not
+match) and goes on waiting for a newer run in it, until the timeout (exit 2). `puppet events` takes `--since`, `--name a,b` and `--follow`.
 
 In a scenario the same wait is a step, `{"wait_event": "client.connected",
 "fail_on": "*.crash", "timeout": 60}` (also `since`, `save`, `show`); a failure
