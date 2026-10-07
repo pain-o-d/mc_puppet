@@ -336,4 +336,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, sameDir, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };
+module.exports = { discover, sameDir, Connection, Puppet, parseSide, named, placesUnder, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };

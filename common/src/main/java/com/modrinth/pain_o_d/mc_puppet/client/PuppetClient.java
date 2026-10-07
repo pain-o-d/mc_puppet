@@ -60,7 +60,10 @@ public final class PuppetClient {
             return CompoundEventResult.pass();
         });
         ClientTickEvent.CLIENT_PRE.register(client -> InputSessions.tick());
-        ClientTickEvent.CLIENT_POST.register(client -> waiter.tick());
+        ClientTickEvent.CLIENT_POST.register(client -> {
+            waiter.tick();
+            ClientEvents.tick(client);
+        });
 
         // Outside a development environment the person playing may not be the person who
         // switched this on, and a line in a log is not somewhere a player looks. Said in

@@ -6,6 +6,7 @@
   "client": [
     "BossBarHudAccessor",
     "ClientPlayerInteractionManagerInvoker",
+    "compat.DisconnectedScreenAccessor",
     "DrawContextMixin",
     "GameRendererMixin",
     "HandledScreenAccessor",
@@ -23,7 +24,9 @@
     "SystemToastAccessor",
     "ToastManagerMixin"
   ],
-  "mixins": [],
+  "mixins": [
+    "CrashReportMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

@@ -53,6 +53,14 @@ public final class ClientCompat {
         ConnectScreen.connect(new TitleScreen(), client, address, new ServerInfo("MC Puppet", asTyped, false), false);
     }
 
+    public static boolean isConnecting(net.minecraft.client.gui.screen.Screen screen) {
+        return screen instanceof ConnectScreen;
+    }
+
+    public static String disconnectReason(net.minecraft.client.gui.screen.DisconnectedScreen screen) {
+        return ((com.modrinth.pain_o_d.mc_puppet.mixin.compat.DisconnectedScreenAccessor) screen).mc_puppet$reason().getString();
+    }
+
     public static void onSound(MinecraftClient client, Consumer<SoundInstance> heard) {
         client.getSoundManager().registerListener((sound, set) -> heard.accept(sound));
     }

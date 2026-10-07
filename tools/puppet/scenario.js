@@ -399,6 +399,26 @@ const ASK_AGAIN_MS = 100;
 async function runStep(puppet, step, saved, options, entry) {
   const side = step.side || options.defaultSide || "client";
   const started = Date.now();
+  if (step.wait_event) {
+    // Waits for a lifecycle event, as `puppet wait --event` does: {"wait_event": "client.connected",
+    // "fail_on": "*.crash", "timeout": 60}. A failure event fails the step at once, not at the timeout.
+    try {
+      const result = await require("./events").waitEvent({
+        dirs: options.eventDirs || puppet.dirs, want: substitute(step.wait_event, saved),
+        failOn: substitute(step.fail_on, saved), since: substitute(step.since, saved),
+        timeoutMs: Number(substitute(step.timeout, saved) || 60) * 1000,
+      });
+      entry.ok = result.code === 0;
+      if (!entry.ok) entry.problems = [result.reason + (result.line ? ": " + result.line : "")];
+      if (step.show || !entry.ok) entry.shown = result.event;
+      if (step.save && result.event) saved[step.save] = result.event;
+    } catch (failure) {
+      entry.ok = false;
+      entry.problems = [failure.message];
+    }
+    entry.ms = Date.now() - started;
+    return entry;
+  }
   if (step.let) {
     // Names for what the steps after it keep saying: {"let": {"price": "${= offer.count * coin.units}"}}.
     try {
@@ -553,7 +573,7 @@ async function run(puppet, scenario, options = {}) {
   async function phase(name, steps, keepGoing) {
     let clean = true;
     for (const step of steps || []) {
-      const entry = step.let ? { step: ++number, side: "-", op: "let" }
+      const entry = step.let || step.wait_event ? { step: ++number, side: "-", op: step.let ? "let" : "wait_event" }
         : { step: ++number, side: step.side || options.defaultSide || "client", op: step.op };
       if (name !== "steps") entry.phase = name;
       if (step.note) entry.note = step.note;

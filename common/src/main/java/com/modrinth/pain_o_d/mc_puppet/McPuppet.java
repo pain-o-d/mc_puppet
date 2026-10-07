@@ -92,6 +92,8 @@ public final class McPuppet {
                     + "or with -Dmc_puppet.enabled=true.");
             return;
         }
+        // Before anything it reports on: the bus is on for this process, as the config says.
+        com.modrinth.pain_o_d.mc_puppet.core.Events.start(config, Platform.getGameFolder());
 
         LifecycleEvent.SERVER_STARTED.register(server -> {
             try {
@@ -119,6 +121,7 @@ public final class McPuppet {
             }
         });
         TickEvent.SERVER_POST.register(server -> SERVER_WAITER.tick());
+        com.modrinth.pain_o_d.mc_puppet.server.ServerEvents.init();
 
         if (Platform.getEnvironment() == Env.CLIENT) {
             // Inside the branch, so that a dedicated server never runs the

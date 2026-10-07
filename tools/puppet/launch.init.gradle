@@ -21,6 +21,11 @@ allprojects { project ->
             if (!run.vmArgs.contains('-Dmc_puppet.enabled=true')) {
                 run.vmArg '-Dmc_puppet.enabled=true'
             }
+            // Tells the game that "puppet launch" started it and has already written process.started
+            // to the events file, which the game must keep when it starts that file afresh.
+            if (!run.vmArgs.contains('-Dmc_puppet.launched=true')) {
+                run.vmArg '-Dmc_puppet.launched=true'
+            }
             if (run.name != 'client') {
                 return
             }

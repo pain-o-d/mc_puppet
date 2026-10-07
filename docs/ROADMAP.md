@@ -149,14 +149,17 @@ after it rests on it.
       other three jars, and a real *client*, are not tried.
 - [x] The tools are an npm package, `mc-puppet`, with `mc-puppet mcp` for the
       MCP server: packed, installed into an empty directory, run through npx.
-      Not published: that is the owner's to do.
+      (Published since; see the publishing item below.)
 - [x] The README says four targets, and how a Forge or NeoForge dev run takes
       the mod (`modLocalRuntime`, not `run/mods`). The licence is in every
       jar; there is an icon and a changelog; the 1.21.1 jars say `+mc1.21.1`.
-- [ ] A repository the metadata's links can point at. They name
-      `github.com/pain-o-d/mc_puppet`, which does not exist yet.
-- [ ] Published: the package on npm, the mod on Modrinth, which is also its
-      Maven.
+- [x] A repository the metadata's links can point at: `github.com/pain-o-d/mc_puppet`
+      is public (CLAUDE.md; `tools/puppet/package.json` and the README name it).
+      Corrected 2026-10-07; it was written here before the repository existed.
+- [x] Published: 0.1.2, a beta, on npm (`mc-puppet`; `package.json` and
+      `mod_version` both say 0.1.2, CHANGELOG has `## 0.1.2`) and on GitHub, and
+      submitted to Modrinth (`mc-puppet`), which is also its Maven. Corrected
+      2026-10-07 from the repository's own files; the registries were not queried.
 - [ ] An exit of its own for a client started with `pretend_production`.
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).

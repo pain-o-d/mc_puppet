@@ -5,10 +5,12 @@
 The short state; dated sections below are history. Rewrite this block, do
 not append to it, in the same commit as the change it describes.
 
-- **Works:** input, connections and build-lease handoff repaired on four targets (committed 2026-10-03/04).
-- **Next:** `docs/backlog.md` task 1, lifecycle events (server/client/launcher, filterable, file sink, `puppet wait`). Written, not started; slices 1A-1E there.
-- **Open:** release 0.1.3 is the owner's; develop is ahead of `v0.1.2` by more than one feature.
-
+- **Works:** lifecycle events (backlog task 1, slices 1A-1E): `Events` bus, server/client/crash hooks, launcher `process.started/exited`, op `lifecycle`, `puppet wait`/`events` (exit 0 event, 1 failure, 2 timeout or no file), scenario step `wait_event`. Tasks 2 and 3 done. Both builds and unit tests pass.
+- **Unverified:** no event was seen firing in a real game; `scenarios/wait-for-the-world.json` was not run.
+- **Front:** `front: mc_puppet 1, Claude, 2026-10-07` cleared (slice 1E, docs, written).
+- **Uncommitted:** all of task 1's code, tests, README, MULTIVERSION, ROADMAP, backlog and this file.
+- **Next:** commit; tasks 4 and 5 are open and owner-gated.
+- **Owner:** release 0.1.3, and a live run of the events; develop is ahead of `v0.1.2` by more than one feature.
 
 What a session opened in this project needs to know that the code and the git
 log do not say. Written 2026-09-22 from a session held in `../hivemind`, which
@@ -16,6 +18,27 @@ did the work below because it needed it; keep it current in the same commit
 as the change it describes.
 
 ## Where things stand
+
+### 2026-10-07: lifecycle events written, not seen running
+
+Task 1 is written in five slices (1A bus, 1B server/client hooks and crash
+capture, 1C launcher, 1D CLI watcher and `wait_event`, 1E documentation). The
+file is `<runDir>/mc_puppet/events.jsonl`, configured by the `events` block of
+`config/mc_puppet.json`, written only when the bridge is on; the operation is
+`lifecycle` because `events` already means chat and toasts. `puppet wait`
+exits 0 on a wanted event, 1 on a failure event (by default `*.crash`,
+`*.connect_failed`, non-zero `process.exited`), 2 on timeout or no file.
+
+**Not seen:** no event was seen firing in a real game, on any of the four
+targets. What is known: both builds compile, the unit tests pass, and
+`npm test` in `tools/puppet` passes; the worked scenario
+`scenarios/wait-for-the-world.json` was not run.
+
+**1.20.1 seams:** `ClientCompat.isConnecting` and `ClientCompat.joinServer`
+(both builds, twins), and `JsonObject.isEmpty()` is absent from 1.20.1's Gson,
+so shared code avoids it (`docs/MULTIVERSION.md`).
+
+**Tasks:** 2 and 3 done; 4 and 5 open, both owner-gated (see `docs/backlog.md`).
 
 ### Input repair, 2026-10-03 (four-target development validation complete)
 

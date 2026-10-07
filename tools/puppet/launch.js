@@ -19,6 +19,7 @@ const path = require("path");
 const os = require("os");
 const { randomUUID } = require("crypto");
 const { spawn, spawnSync } = require("child_process");
+const events = require("./events");
 const { Connection, sameDir } = require("./lib");
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -173,19 +174,30 @@ function start(planned) {
   fs.mkdirSync(path.dirname(planned.log), { recursive: true });
   const out = fs.openSync(planned.log, "w");
   let lease, child;
+  const eventsFile = events.eventsFile(path.resolve(planned.gameDir));
   try {
     lease = registerBuild(planned);
     const words = gradleArguments(planned, lease);
     const detached = { cwd: planned.project, detached: true, stdio: ["ignore", out, out], windowsHide: true };
+    // Through supervise.js: it is the one process that outlives this command and so can write
+    // process.exited, with the exit code, whenever the game ends (docs/backlog.md, task 1D).
+    // The launcher writes events only for a run it knows has the bridge on: launch.init.gradle switches
+    // it on for every run it starts, and events exist only where the bridge is (core Events.start).
+    const bridge = true;
+    const supervised = (cmd, args) => spawn(process.execPath, [path.join(__dirname, "supervise.js"), JSON.stringify({
+      bridge, file: eventsFile, gameDir: path.resolve(planned.gameDir), cmd, args, cwd: planned.project,
+      task: planned.task, name: planned.name || undefined,
+    })], detached);
+    if (bridge) events.resetEvents(eventsFile);
     if (process.platform !== "win32") {
-      child = spawn(planned.wrapper, words, detached);
+      child = supervised(planned.wrapper, words);
     } else {
       // Run Java directly: detached cmd loses the Gradle log on Windows.
       const java = windowsJava();
       const jar = path.join(planned.project, "gradle", "wrapper", "gradle-wrapper.jar");
       child = java && fs.existsSync(jar)
-        ? spawn(java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradlew", "-jar", jar, ...words], detached)
-        : spawn(process.env.ComSpec || "cmd.exe", ["/d", "/c", planned.wrapper, ...words], detached);
+        ? supervised(java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradlew", "-jar", jar, ...words])
+        : supervised(process.env.ComSpec || "cmd.exe", ["/d", "/c", planned.wrapper, ...words]);
     }
   } catch (error) {
     if (lease) updateBuild(lease, {phase:"exited", spawnFailed:true, error:error.message});

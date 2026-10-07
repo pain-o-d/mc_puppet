@@ -54,6 +54,16 @@ public final class ClientCompat {
                 new ServerInfo("MC Puppet", asTyped, ServerInfo.ServerType.OTHER), false, null);
     }
 
+    /** Whether the screen is the "Connecting to the server..." one; its package differs between versions. */
+    public static boolean isConnecting(net.minecraft.client.gui.screen.Screen screen) {
+        return screen instanceof ConnectScreen;
+    }
+
+    /** What a disconnect screen says; the screen holds it differently on each version. */
+    public static String disconnectReason(net.minecraft.client.gui.screen.DisconnectedScreen screen) {
+        return ((com.modrinth.pain_o_d.mc_puppet.mixin.compat.DisconnectedScreenAccessor) screen).mc_puppet$info().reason().getString();
+    }
+
     /** Every sound the client plays, as it plays it. */
     public static void onSound(MinecraftClient client, Consumer<SoundInstance> heard) {
         client.getSoundManager().registerListener((sound, set, range) -> heard.accept(sound));

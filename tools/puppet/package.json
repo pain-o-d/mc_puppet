@@ -35,6 +35,8 @@
     "launch.js",
     "launch.init.gradle",
     "junit.js",
+    "events.js",
+    "supervise.js",
     "png.js",
     "README.md",
     "LICENSE"
@@ -43,6 +45,6 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test scenario.test.js launch.test.js connection.test.js"
+    "test": "node --test scenario.test.js launch.test.js connection.test.js mcp.test.js junit.test.js events.test.js"
   }
 }

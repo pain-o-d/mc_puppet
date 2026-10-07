@@ -23,11 +23,16 @@ import com.google.gson.JsonParseException;
  * <p>There is deliberately no setting for the address. It is the loopback,
  * always.
  */
-public record PuppetConfig(boolean enabled, int clientPort, int serverPort, boolean refusedForWantOfConsent) {
+public record PuppetConfig(boolean enabled, int clientPort, int serverPort, boolean refusedForWantOfConsent,
+        Events.Settings events) {
 
     /** As a development environment reads it: a switch is all it takes. */
     public PuppetConfig(boolean enabled, int clientPort, int serverPort) {
-        this(enabled, clientPort, serverPort, false);
+        this(enabled, clientPort, serverPort, false, Events.Settings.defaults());
+    }
+
+    public PuppetConfig(boolean enabled, int clientPort, int serverPort, boolean refusedForWantOfConsent) {
+        this(enabled, clientPort, serverPort, refusedForWantOfConsent, Events.Settings.defaults());
     }
 
     /**
@@ -44,7 +49,7 @@ public record PuppetConfig(boolean enabled, int clientPort, int serverPort, bool
         if (!asked.enabled() || development || Consent.given(home, gameDir)) {
             return asked;
         }
-        return new PuppetConfig(false, asked.clientPort(), asked.serverPort(), true);
+        return new PuppetConfig(false, asked.clientPort(), asked.serverPort(), true, asked.events());
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger("mc_puppet");
@@ -56,6 +61,7 @@ public record PuppetConfig(boolean enabled, int clientPort, int serverPort, bool
         boolean enabled = false;
         int clientPort = DEFAULT_CLIENT_PORT;
         int serverPort = DEFAULT_SERVER_PORT;
+        Events.Settings events = Events.Settings.defaults();
 
         Path file = configDir.resolve("mc_puppet.json");
         try {
@@ -66,6 +72,7 @@ public record PuppetConfig(boolean enabled, int clientPort, int serverPort, bool
                     enabled = read.has("enabled") && read.get("enabled").getAsBoolean();
                     clientPort = portOf(read, "client_port", clientPort);
                     serverPort = portOf(read, "server_port", serverPort);
+                    events = Events.Settings.parse(read.get("events"), LOGGER::warn);
                 }
             } else {
                 Files.createDirectories(configDir);
@@ -89,7 +96,7 @@ public record PuppetConfig(boolean enabled, int clientPort, int serverPort, bool
         }
         clientPort = Integer.getInteger("mc_puppet.client_port", clientPort);
         serverPort = Integer.getInteger("mc_puppet.server_port", serverPort);
-        return new PuppetConfig(enabled, clientPort, serverPort);
+        return new PuppetConfig(enabled, clientPort, serverPort, false, events);
     }
 
     private static int portOf(JsonObject read, String key, int fallback) {

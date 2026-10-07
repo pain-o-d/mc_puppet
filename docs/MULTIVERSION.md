@@ -85,8 +85,17 @@ around them.
 | `ClientCompat.updateCrosshair` | `updateTargetedEntity` | `updateCrosshairTarget` |
 | `ClientCompat.openWorld` / `createWorld` | a parent screen first; no parent | a cancel callback; a parent |
 | `ClientCompat.joinServer` | `gui.screen.ConnectScreen`, a `ServerInfo` that is or is not local | `gui.screen.multiplayer`, a server type, and a cookie store to pass |
+| `ClientCompat.isConnecting` | `gui.screen.ConnectScreen` | `gui.screen.multiplayer.ConnectScreen`; the lifecycle events use it to tell a connect that failed from one that is still going |
 | `ClientCompat.onSound` | two arguments | three |
 | `ClientCompat.sidebarOf` / `linesOf` | slot 1, `ScoreboardPlayerScore` | an enum, `ScoreboardEntry` |
+
+**Gson's `JsonObject.isEmpty()` is absent on 1.20.1.** The Gson that version
+ships predates it, so shared code that touches a `JsonObject` (the lifecycle
+events' config and data) must not call it; use `size()` or `entrySet()`, which
+both versions have. Not a `compat` seam, since the shared form works on both;
+recorded so nobody "tidies" it back to `isEmpty()` and breaks the 1.20.1 build.
+Both builds compile and the unit tests pass on both; no event was seen firing
+in a running 1.20.1 game.
 
 **Mixins turned out not to need forking**, which was the surprise. The two
 that named something version-specific were made not to: `DrawContextMixin`

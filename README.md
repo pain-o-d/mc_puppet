@@ -526,6 +526,57 @@ refusal in words; it is listed by `help`. Names are `modid:operation`.
 Compile against MC Puppet without requiring it (`modCompileOnly`, an optional
 dependency in the metadata, the check above). Register at any time.
 
+## Lifecycle events: waiting for the game
+
+A test that starts a game has to know when it is ready, when it failed to
+join, and when it crashed, without sleeping and without reading a log. While
+the bridge is on, the game, the server and the launcher write what happened
+as **one JSON object per line** to `<runDir>/mc_puppet/events.jsonl`:
+
+```json
+{"seq":12,"ts":"2026-10-07T17:08:12.431Z","side":"server","name":"server.crash","level":"error","data":{"report":"crash-reports/crash-2026-10-07_17.08.12-server.txt","cause":"AccessDeniedException: ..."}}
+```
+
+- **Names:** `server.starting`, `server.ready`, `server.stopping`,
+  `server.stopped`, `server.crash`, `client.starting`, `client.crash`, `client.connecting`,
+  `client.connected`, `client.connect_failed`, `client.reconnected`,
+  `client.disconnected`, `client.ready`,
+  `player.joined`, `player.left`, and from the launcher `process.started` and
+  `process.exited` (the exit code, and the newest crash report if one
+  appeared). The launcher sees what no hook in the game can: a native crash, a
+  kill, a failure before the mod loads.
+- **Only where the bridge is on.** Nothing is written in a shipped
+  configuration; this is not a way around consent. The file is emptied when a
+  run starts, and the game keeps the last 1000 events for the operation below.
+- **Configuration**, the `events` block of `config/mc_puppet.json`, all keys
+  optional: `"enabled"` (event names to record, `["*"]` for all; by default
+  every warning and error plus `server.ready`, `client.ready`,
+  `client.connected`, `client.connect_failed` and `client.disconnected`),
+  `"sinks"` (`"file"`, the default, and/or `"stdout"`) and `"min_level"`
+  (`info`, `warn` or `error`). A bad block is reported and the defaults used.
+- **The operation is `lifecycle`**, not `events`: `events` already means chat
+  and toasts on the client. `lifecycle {since?, names?, limit?}` answers what is
+  recorded, numbered; ask `since` the last `sequence` you saw.
+
+```bash
+node tools/puppet/puppet.js events --follow            # one line per event, for tail -f or a Monitor
+node tools/puppet/puppet.js wait --event client.connected --timeout 60
+node tools/puppet/puppet.js wait --event server.ready --fail-on "*.crash,*.connect_failed" --timeout 120
+```
+
+`puppet wait --event NAME[,NAME]` (`*` is a wildcard: `client.*`) prints the
+line of the event that ended the wait and exits **0** when a wanted event
+arrived, **1** when a failure event did, **2** on timeout or when there is no
+events file. Without `--fail-on` the failures are any `*.crash`, any
+`*.connect_failed` and a `process.exited` with a non-zero code; `--fail-on`
+replaces that list. `--since N` ignores events up to sequence N, `--dir` picks
+the project. `puppet events` takes `--since`, `--name a,b` and `--follow`.
+
+In a scenario the same wait is a step, `{"wait_event": "client.connected",
+"fail_on": "*.crash", "timeout": 60}` (also `since`, `save`, `show`); a failure
+event fails the step at once rather than at the timeout. A worked one is
+`scenarios/wait-for-the-world.json`.
+
 ## For AI coding agents (MCP)
 
 `mc-puppet mcp` is a dependency-free [MCP](https://modelcontextprotocol.io)

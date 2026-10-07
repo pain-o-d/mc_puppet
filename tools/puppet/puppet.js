@@ -16,6 +16,12 @@
  *                                                 clients of their own, each in runs/<name> under its own
  *                                                 player's name, joined to a server: "client@bot2" in a scenario
  *   node puppet.js stop [name ...]                quit the client, stop the server; or only the games named
+ *   node puppet.js events [--follow] [--since N] [--name a,b]
+ *                                                 lifecycle events, one JSON line each (--follow: for tail -f / Monitor)
+ *   node puppet.js wait --event a,b [--fail-on c,d] --timeout 60
+ *                                                 exit 0 when a wanted event arrives, 1 on a failure event
+ *                                                 (default: a crash, client.connect_failed, a non-zero
+ *                                                 process.exited), 2 on timeout; prints that event's line
  *   node puppet.js allow <gameDir>                let this game be driven outside a development
  *                                                 environment (a real launcher's instance); "disallow"
  *                                                 takes it back, "allowed" lists them
@@ -39,6 +45,10 @@
  *                     options.txt of the loader's run/)
  *   --timeout <s>     launch: how long a start may take (default: 600)
  *   --init-script <file.gradle> launch: add an explicit readable init file; repeatable, beside the launcher hook
+ *   --event <a,b>     wait: the event names wanted ("*" is a wildcard: client.*, *.crash)
+ *   --fail-on <a,b>   wait: events that end the wait in failure (replaces the default list)
+ *   --since <n>       events, wait: only events with a sequence number above n
+ *   --follow          events: keep printing what arrives
  *   --keep-going      run every step of a scenario even after one fails
  *   --json            print the raw answer
  *   --no-log          do not fail a scenario for errors the game logged while it ran
@@ -47,6 +57,7 @@ const fs = require("fs");
 const path = require("path");
 const { Puppet } = require("./lib");
 const scenario = require("./scenario");
+const events = require("./events");
 
 function parseArgs(words) {
   if (words.length === 1 && words[0].trim().startsWith("{")) return JSON.parse(words[0]);
@@ -72,6 +83,10 @@ async function main() {
   let watchLog = true;
   let junit = null;
   let updateGolden = false;
+  let follow = false;
+  let since = null;
+  let wantEvent = null;
+  let failOn = null;
   const launchOptions = { project: ".", loader: "fabric", world: null, server: null, name: null, username: null,
     template: null, timeout: 600, initScripts: [] };
   const words = [];
@@ -82,6 +97,10 @@ async function main() {
     else if (argv[index] === "--no-log") watchLog = false;
     else if (argv[index] === "--junit") junit = argv[++index];
     else if (argv[index] === "--update-golden") updateGolden = true;
+    else if (argv[index] === "--follow") follow = true;
+    else if (argv[index] === "--since") since = Number(argv[++index]);
+    else if (argv[index] === "--event") wantEvent = argv[++index];
+    else if (argv[index] === "--fail-on") failOn = argv[++index];
     else if (argv[index] === "--project") launchOptions.project = argv[++index];
     else if (argv[index] === "--loader") launchOptions.loader = argv[++index];
     else if (argv[index] === "--world") launchOptions.world = argv[++index];
@@ -136,6 +155,17 @@ async function main() {
         console.log("  " + JSON.stringify({ ...info, mods: info.mods ? info.mods.length + " mods" : undefined }));
       }
       return 0;
+    }
+    if (first === "events") {
+      // Lifecycle events (docs/backlog.md, task 1): one line per event, for `tail -f` and Monitor.
+      await events.showEvents({ dirs, since, only: launchOptions.name, follow, emit: (line) => console.log(line) });
+      return 0;
+    }
+    if (first === "wait") {
+      const result = await events.waitEvent({ dirs, want: wantEvent, failOn, since, timeoutMs: launchOptions.timeout * 1000 });
+      if (result.line) console.log(result.line);
+      else console.error("puppet: " + result.reason);
+      return result.code;
     }
     if (first === "run") {
       let failures = 0;
