@@ -200,3 +200,24 @@ Result 2026-10-07 (owner: menu only, no world):
   repair, `focused-input`, `eyes-and-hands`, `mouse-drag`, `trade-with-a-villager`,
   `wait-for-the-world` beyond step 1; `two-clients-one-server` needs more than one client.
 - NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1: still open, owner-gated.
+
+Result 2026-10-07, second run (owner asked for a full check; Fabric 1.21.1 with a world):
+- Seen: default events in events.jsonl seq 1 process.started, 2 client.ready, 3 server.ready, 4 client.connected, 5 client.disconnected (monotonic); then after `client leave_world` client.disconnected {reason:left}, after `client quit` process.exited code 0; no orphan java.
+- `wait-for-the-world.json` PASS 2/2; eyes-and-hands PASS; mouse-drag PASS; focused-input PASS 59/59 and trade-with-a-villager PASS 24/24 in a flat world with structures:false (in a default world with structures both failed because of the world: a water block, a librarian instead of the farmer).
+- Held input: `hold forward` stopped by `client stop` (hold ends "input was stopped", position stops), `hold forward+sprint` ended by `client release_keys` ("input was released"). break_block PASS (broke minecraft:dirt, ticks 15; refuses with "looking at ... the crosshair is on the block at ..."). Hotbar hand repair PASS (7 hotbar ops in focused-input incl. slot 99 and a repeated slot).
+- Dedicated server (Fabric 1.21.1, `:fabric:runServer`): server.ready seq 1 only, no client classes loaded, stopped by `puppet server command stop`, clean exit.
+- NOT seen, because not on by default (Events.java:111 lists only server.ready, client.ready, client.connected, client.connect_failed, client.disconnected): player.joined, player.left, server.stopping, server.stopped. Open: rerun with config events.enabled=["*"] to prove them, and check that an event fired during server shutdown still reaches the file.
+- Findings (no bug): `puppet wait --event client.ready` returns 0 at once if the old events.jsonl of a finished run is still there (stale match) — decide whether launch or wait should guard with --since; scenarios focused-input and trade-with-a-villager need a flat structures:false world, say so in their text.
+- Still open and owner-gated: NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1; two-clients-one-server (needs two clients).
+
+## Task 6 — Prove player.joined/left and server.stopping/stopped with events.enabled=["*"]
+
+Status: **open**, Fabric 1.21.1 client and dedicated server; 2026-10-07.
+
+## Task 7 — Stale events.jsonl match in `puppet wait`
+
+Status: **open**, decide whether launch or wait should guard with --since; 2026-10-07.
+
+## Task 8 — Document flat-world requirement in scenarios
+
+Status: **open**, focused-input and trade-with-a-villager need structures:false; 2026-10-07.
