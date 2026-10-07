@@ -212,7 +212,11 @@ Result 2026-10-07, second run (owner asked for a full check; Fabric 1.21.1 with 
 
 ## Task 6 — Prove player.joined/left and server.stopping/stopped with events.enabled=["*"]
 
-Status: **open**, Fabric 1.21.1 client and dedicated server; 2026-10-07.
+Status: **done** 2026-10-07 (Fabric 1.21.1, `events.enabled=["*"]`, config restored). Dedicated server: server.starting 1, server.ready 2, server.stopping 3, server.stopped 4, all in the file after the process ended. Client with a flat structures:false world: player.joined 5, client.connected 6, player.left 7, server.stopping 8, server.stopped 9 (about 33 s after, during world save), client.disconnected 10 (reason left), process.exited 11 code 0. Shutdown events reach the file. No orphan java. Note: `puppet server command stop` fails, the form is `command=stop`.
+
+## Task 9 — Stale file after a dedicated-server run
+
+Status: **open**, 2026-10-07. Found in task 6: `puppet wait --event server.ready` issued right after a launch returned at once with the previous run's line, because the file is emptied only when the new run starts. Task 7's guard covers only a file ending in `process.exited`; a dedicated server started by `runServer` ends with `server.stopped` and no `process.exited`. Decide: treat a last event `server.stopped` as finished too, or have `wait` read the file's run mtime/pid. Add a test; keep `--since` unchanged.
 
 ## Task 7 — Stale events.jsonl match in `puppet wait`
 

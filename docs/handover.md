@@ -6,10 +6,10 @@ The short state; dated sections below are history. Rewrite this block, do
 not append to it, in the same commit as the change it describes.
 
 - **Works:** lifecycle events (backlog task 1, slices 1A-1E): `Events` bus, server/client/crash hooks, launcher `process.started/exited`, op `lifecycle`, `puppet wait`/`events` (exit 0 event, 1 failure, 2 timeout or no file), scenario step `wait_event`. Tasks 2 and 3 done. Both builds and unit tests pass.
-- **Seen running (2026-10-07, Fabric 1.21.1 world run):** events.jsonl seq 1-5 (process.started, client.ready, server.ready, client.connected, client.disconnected); scenarios passed (wait-for-the-world 2/2, eyes-and-hands, mouse-drag, focused-input 59/59, trade-with-a-villager 24/24); held input stop/release, break_block and hotbar repair all passed; dedicated server started/stopped cleanly.
-- **Front:** none (tasks 1-4 done and committed; task 5 partly done).
+- **Seen running (2026-10-07, Fabric 1.21.1 world run):** events.jsonl seq 1-5 (process.started, client.ready, server.ready, client.connected, client.disconnected); scenarios passed (wait-for-the-world 2/2, eyes-and-hands, mouse-drag, focused-input 59/59, trade-with-a-villager 24/24); held input stop/release, break_block and hotbar repair all passed; dedicated server started/stopped cleanly. Task 6 with `events.enabled=["*"]`: player.joined/left and server.stopping/stopped all reached the file, shutdown ones too. Tasks 6-8 done.
+- **Front:** none (tasks 1-8 done and committed; task 5 partly done, rest owner-gated).
 - **Uncommitted:** nothing.
-- **Next:** tasks 6-8 (prove all events on Fabric 1.21.1, stale events match, flat-world docs); then NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 (owner-gated).
+- **Next:** task 9 (stale file after a dedicated-server run); then NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 (owner-gated).
 - **Owner:** release 0.1.3, and a live run of the events; develop is ahead of `v0.1.2` by more than one feature.
 
 What a session opened in this project needs to know that the code and the git
