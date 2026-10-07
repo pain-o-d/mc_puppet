@@ -179,9 +179,7 @@ double read before it is merged.
 
 ## Task 5 — Scenarios for what only a real game shows
 
-Status: **open, owner-gated**, written 2026-10-07. Needs a real game on all
-four targets (1.21.1 Fabric and NeoForge, 1.20.1 Fabric and Forge), so it
-cannot be done by an agent alone.
+Status: **done** 2026-10-08 for the four dev targets (see the last result below); still unproven: the other jars outside a dev environment, a client from a launcher, `two-clients-one-server`. Written 2026-10-07.
 
 Scenarios for: stopping and releasing held input; `break_block`; repairing a
 hotbar hand. And `tools/prod-check.js` beyond the one case it was seen on
@@ -209,6 +207,8 @@ Result 2026-10-07, second run (owner asked for a full check; Fabric 1.21.1 with 
 - NOT seen, because not on by default (Events.java:111 lists only server.ready, client.ready, client.connected, client.connect_failed, client.disconnected): player.joined, player.left, server.stopping, server.stopped. Open: rerun with config events.enabled=["*"] to prove them, and check that an event fired during server shutdown still reaches the file.
 - Findings (no bug): `puppet wait --event client.ready` returns 0 at once if the old events.jsonl of a finished run is still there (stale match) — decide whether launch or wait should guard with --since; scenarios focused-input and trade-with-a-villager need a flat structures:false world, say so in their text.
 - Still open and owner-gated: NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1; two-clients-one-server (needs two clients).
+
+Result 2026-10-08 (owner allowed the agent to run games): all PASS, no bug. Task 9 live on Fabric 1.21.1 dedicated server: `wait --event server.ready` right after a new `runServer` returned the new run's seq 1, not the old line. NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 each: events seq 1-6 (process.started, client.ready, server.ready, client.connected, client.disconnected, process.exited code 0), flat world structures=false, wait-for-the-world 2/2, focused-input 59/59, eyes-and-hands 47/47, mouse-drag 39/39, trade-with-a-villager 24/24, leave_world and quit clean, no orphan java. Not run: `two-clients-one-server`, `prod-check.js` on the other jars, a launcher client.
 
 ## Task 6 — Prove player.joined/left and server.stopping/stopped with events.enabled=["*"]
 
