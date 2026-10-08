@@ -28,7 +28,7 @@ by somebody looking at it. MC Puppet makes the client answer questions.
 
 Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge), those two versions exactly · needs [Architectury API](https://modrinth.com/mod/architectury-api), and on Fabric [Fabric API](https://modrinth.com/mod/fabric-api) · MIT
 
-> **Beta.** Used so far by one mod's test suite, its author's. Seen working: the
+> **Beta.** Used by local mod and pack integration suites. Seen working: the
 > scenarios on all four targets in development environments, and the built jar
 > in a real NeoForge 1.21.1 server. **Not yet tried**: the other three jars
 > outside a development environment, and a real client from an ordinary
@@ -148,7 +148,7 @@ instead, and Loom remaps it:
 ```groovy
 dependencies {
     // In a dev run only: never in your jar, never in your published dependencies.
-    modLocalRuntime "maven.modrinth:mc-puppet:0.1.2+mc1.20.1-forge"   // or +mc1.21.1-neoforge
+    modLocalRuntime "maven.modrinth:mc-puppet:0.1.3+mc1.20.1-forge"   // or +mc1.21.1-neoforge
 }
 ```
 
@@ -167,17 +167,17 @@ In short:
 
 | Client | |
 |---|---|
-| `info` `screen` `player` `count` `chat` `entities` `screenshot` | seeing |
+| `info` `screen` `player` `count` `chat` `entities` `watch` `screenshot` | seeing |
 | `frame` `tooltip` `hud` `events` | seeing what is not a widget |
 | `block` `blocks` `target` `raycast` `world` `perf` `bindings` | the world as the client has it |
 | `click_widget` `click_at` `hover` `drag` `scroll` `key` `release_keys` `type` | a mouse and a keyboard |
-| `look` `hold` `tap` `move_to` `attack` `break_block` `stop` | the character |
+| `look` `hold` `tap` `mouse_drag` `move_to` `attack` `break_block` `stop` | the character |
 | `set_text` `click_slot` `select_trade` `close_screen` `command` `say` `use_entity` `use_block` `use_item` `hotbar` | doing |
-| `worlds` `create_world` `open_world` `leave_world` `window` `quit` `wait` | getting there |
+| `worlds` `create_world` `open_world` `join_server` `leave_world` `window` `quit` `wait` | getting there |
 
 | Server | |
 |---|---|
-| `info` `players` `inventory` `count` `entities` `entity` `block` | seeing |
+| `info` `players` `inventory` `count` `entities` `watch` `entity` `block` | seeing |
 | `command` (captured output, optional `as` a player) | doing |
 | `wait` (ticks, or players online) | |
 
@@ -200,6 +200,32 @@ opens the inventory), `"modifiers": ["shift"]` makes a shift-click, and a
 drag over slots spreads a stack as it does for a player. A mod that listens
 for a screen event instead of overriding a method is exercised like any other.
 `"direct": true` calls the screen's own method instead, for the odd case.
+
+**A drag with a button held**, on a screen or in the world, is heard as a
+player's is, behind other windows too. The game takes mouse movement only
+while its window has focus, and hands it on once a frame; so while the button
+is down it is told its window has focus (and, with no screen open, that the
+cursor is grabbed — the real one is left alone), and each move waits for a
+frame to take the last. On a screen, `drag` goes through slots or points,
+each leg cut into `steps` moves for a slider or anything that follows the
+mouse. In the world, `mouse_drag` holds a mouse button and moves the mouse
+while it is held — in degrees of turn at the player's sensitivity, or in
+window pixels — which is what a mod reads when a block is worked by dragging
+with use held down: a lever pulled by the mouse, a wheel turned by it.
+
+```json
+{ "op": "look", "args": { "at": { "x": 4.5, "y": -59.5, "z": 0.5 } } },
+{ "op": "mouse_drag", "args": { "button": "use", "pitch": -90, "ticks": 20, "after": 4 },
+  "note": "use held on the lever, the mouse pushed up, then let go" }
+```
+
+It answers how far the head `turned` — nothing, when a mod took the movement
+for itself — and `window_focused`, whether the window really had focus.
+`button` is `use` (the mouse button that binding is on) by default; `attack`,
+`left`, `right`, `middle` or a number otherwise. Mouse up is a negative
+`pitch`. `before` and `after` are ticks held still after pressing and before
+letting go. `window {focused: false}` tells the game its window lost focus,
+to try a test as it will run behind other windows.
 
 **Names that survive a release build.** A class name is not one:
 `MerchantScreen` is `class_492` in a shipped jar. `screen` reports a
@@ -239,6 +265,59 @@ anyone could look — messages, the action bar, titles, toasts and **sounds** �
 numbered, so a test takes `sequence` before acting and asks `since` it after:
 a sound is often all a mod does to say that something worked.
 
+### Seeing motion: `watch`
+
+A screenshot is one frame; what goes wrong with things that move goes wrong
+between frames. `watch` looks at the entities every tick for a while - on the
+client (near the player) or on the server - and says how they moved:
+
+```json
+{ "op": "watch", "args": { "type": "minecraft:zombie", "radius": 48, "ticks": 200 },
+  "show": true,
+  "expect": [ { "path": "jumps", "equals": 0 }, { "path": "blinks", "equals": 0 },
+              { "path": "sliding_share", "lte": 0.05 }, { "path": "overlaps_mean", "lte": 1 } ] }
+```
+
+It answers with `appeared`, `disappeared` and `blinks` (entities that lived
+five ticks or fewer), `step_max`, `step_p95` and `jumps` (a step over `jump`
+blocks in one tick - a teleport), `turn_max` and `turns` (over `turn` degrees
+in a tick), `sliding` and `sliding_share` (moving with legs that do not),
+`floating` (held up over air with no gravity, flyers excepted), `buried`
+(inside a block), `burning` (entity-ticks drawn afire), `overlaps_mean` and `overlaps_max` (pairs closer than their
+width), and the twitching a jump threshold misses: `reversals` (a step against
+the one before it - shoved and put back), `wobbles` (a turn against the one
+before it), `pace_mean` and `pace_cv` (each step's length while moving, and its
+unevenness - 0 an even walk, 0.5 a stop-and-go), `backwards` and `sideways`
+(steps against the body's facing, beyond 120 degrees and beyond 60;
+`backwards_share` of the moving steps), `head_askew` (the head turned more
+than 75 degrees from the body), `bursts` (a step twice the entity's own median
+pace - a clock skipped, a correction), and the likeness of a walk rather
+than its defects: `sideways_share`, `accel_p95` and `accel_over` (the change
+of speed between two moving ticks, and how often it was over a quarter of
+the entity's own pace), `stops` (walked, stood a moment, walked on),
+`pace_cv_median` and `pace_cv_p95` (each entity's own unevenness of pace -
+a crowd may be uneven while every member is steady), `neighbour_mean` and
+`neighbour_cv` (each moving entity's distance to its nearest moving
+neighbour within two blocks - a parade's are all alike). Take the same
+numbers of the same mobs walking on their own, and a group's are read
+against them. On the client it also looks
+between the ticks, at every frame, where the renderer draws each entity - eased
+from its last tick's place to this one's - and counts `frame_reversals` and
+`frame_wobbles`, a frame's move or turn against the frame before's: an entity
+nobody places any more, or one placed twice a tick, is drawn sliding from its
+last place and snapping back every tick, a twitch on the spot the tick-by-tick
+numbers never show (`frames_sampled` says over how many frames). And the frames
+it watched through: `fps`, `frame_ms_mean`, `frame_ms_p95`, `frame_ms_max`,
+`stalls_over_50ms`. With `trace: true` the answer carries every entity's tick,
+x, z and facing every tick, for a script to read. `worst`
+has the worst case of each kind with the entity, the tick, where, and its
+last ten ticks (position, facing, legs' speed) - a failed test says what to
+look at. On the client only what the renderer would draw counts
+(`drawn_only`, the default: a mod may draw a stand-in and hide the real
+entity); `ai: false` watches only mobs with no brain, `true` only the rest.
+The server's watch reads the world's entity list and nothing else, so a mod
+that answers entity queries is not disturbed by being watched.
+
 `block`, `blocks`, `target`, `raycast` and `world` read the world as the
 *client* believes it. Ask the server the same and a client out of step with it
 is caught.
@@ -254,6 +333,29 @@ attack on what the crosshair is on, and `break_block` holds it on a block for
 as long as that takes with what is in hand — dirt by hand is fifteen ticks, and
 a test can say so. None of it teleports: what a mod does to movement, reach or
 mining is between the key and its effect, and that is the part exercised.
+
+Temporal input (`hold`, `move_to`, `break_block`, `drag`, `mouse_drag` and
+`hotbar`) has one owner. Overlapping input refuses; reads and waits
+remain available. `stop` or `release_keys` revokes the owner before queued
+callbacks can press again. A changed world, player, connection or screen,
+leaving this machine, timeout and client shutdown also release its input.
+Held input and mouse gestures use scoped focus behind other windows without
+grabbing the real cursor. Cleanup releases the owned bindings and their queued
+presses; ordinary vanilla mining, tool wear and server checks still apply.
+Closing a socket does not cancel its request: use `stop` or `release_keys`.
+
+`hotbar {slot: 0}` synchronizes the clamped slot through vanilla's selection
+handler even when that slot already appears selected on the client. It returns
+`null` as before. Ask the server's inventory or `SelectedItemSlot` for the
+authoritative result; client state alone does not establish what is in hand.
+
+The current input repair passed 169 scenario steps and 83 native input checks
+on each of the four development targets. A production NeoForge consumer also
+verified same-slot repair, 16 cold concurrent server-block reads and ordinary
+two-USE mod interaction with exact item consumption. Read concurrency shares
+one pending Node connection for the same endpoint; temporal input retains its
+single owner. The [handover](https://github.com/pain-o-d/mc_puppet/blob/develop/docs/handover.md)
+records the checked scope and preserved failures.
 
 ## Scenarios
 
@@ -310,6 +412,9 @@ mining is between the key and its effect, and that is the part exercised.
 from both sides of the game and cleans up after itself;
 `scenarios/eyes-and-hands.json` walks, breaks a block, hits a pig, and reads a
 tooltip, the action bar, a sound and a frame. Both pass on Fabric and NeoForge.
+`scenarios/mouse-drag.json` spreads a stack over four slots by dragging with
+each button, and draws a bow while the mouse turns the head, with the window
+told it lost focus; it passes on all four.
 
 ## Writing tests faster
 
@@ -351,6 +456,57 @@ server, and only after the worlds are saved.
 `MC_PUPPET_DIRS=a=run1;b=run2` — and a step says `"side": "client@b"`. One
 game directory per game.
 
+**Several clients on one server.** A project has one `run/` and one player's
+name, and a multiplayer test needs more:
+
+```bash
+puppet launch server
+puppet launch client --name bot1,bot2,bot3 --server localhost:25565
+puppet run scenarios/two-clients-one-server.json
+puppet client@bot2 player
+puppet stop bot3          # or everything: puppet stop
+```
+
+Each name is a game directory of its own, `<loader>/runs/<name>`, made on first
+use from the `mods`, `config` and `options.txt` of the loader's `run/` (or from
+`--template <dir>`) and then left alone; the player is called by the same name
+unless `--username` says otherwise; the bridge takes the next free port by
+itself; and the folder's name is the game's, so `client@bot2` needs no `--dir`.
+The project's build file is not touched: an init script says all this to Gradle
+for the one run. Builds start one after another and the games load side by side;
+three dev clients were in a world 41 seconds after the command.
+
+`launch --init-script <file.gradle>` adds an explicit readable Gradle init file
+beside the launcher's own hook. Repeat the option for several files; their order
+is preserved. Relative paths resolve from the invoking working directory, and
+spaces remain part of the argument. A consumer can use this to add its test-pack
+dependencies without changing the project or losing the build-mutex handoff.
+
+`join_server {address}` is the operation underneath, followed by
+`wait {for: world}`, which ends at once with the server's own words if the
+player is turned away. It goes to `localhost` or a loopback address and to
+nothing else, for the reason the bridge is deaf anywhere else. **A test server
+on another machine** is reached by bringing its port here:
+`ssh -L 25565:localhost:25565 that-machine`, then `localhost:25565`. The
+connection is then one to this machine, which is true: whoever can open that
+tunnel can log in there. The server can stay bound to its own loopback, which
+an offline-mode server should be anyway. Its own bridge stays there with its
+token; ask it over RCON, or run the scenario's server steps on that machine.
+
+
+
+### External build mutexes
+
+A launcher supervisor may set LOOM_LOCK_PARTICIPANTS to an absolute directory
+and LOOM_LOCK_TOKEN to its ownership token. Each detached Gradle invocation
+writes a wrapper lease there; Gradle owns its separate `.json.gradle.json`
+record with daemon PID and phase. The init script changes that record from
+building to ready just before the chosen run task, after compilation/remapping
+dependencies. The supervisor validates both records and can release its build
+mutex at ready while Minecraft runs. Wrapper exit cannot overwrite the daemon
+record; a missing or uninspectable build record requires owner inspection.
+Without these variables the npm launcher is standalone.
+
 ## Operations of your own mod
 
 A test of a mod wants the mod's state as data, not what a command printed:
@@ -369,6 +525,59 @@ The handler runs on its side's game thread; what it throws comes back as a
 refusal in words; it is listed by `help`. Names are `modid:operation`.
 Compile against MC Puppet without requiring it (`modCompileOnly`, an optional
 dependency in the metadata, the check above). Register at any time.
+
+## Lifecycle events: waiting for the game
+
+A test that starts a game has to know when it is ready, when it failed to
+join, and when it crashed, without sleeping and without reading a log. While
+the bridge is on, the game, the server and the launcher write what happened
+as **one JSON object per line** to `<runDir>/mc_puppet/events.jsonl`:
+
+```json
+{"seq":12,"ts":"2026-10-07T17:08:12.431Z","side":"server","name":"server.crash","level":"error","data":{"report":"crash-reports/crash-2026-10-07_17.08.12-server.txt","cause":"AccessDeniedException: ..."}}
+```
+
+- **Names:** `server.starting`, `server.ready`, `server.stopping`,
+  `server.stopped`, `server.crash`, `client.starting`, `client.crash`, `client.connecting`,
+  `client.connected`, `client.connect_failed`, `client.reconnected`,
+  `client.disconnected`, `client.ready`,
+  `player.joined`, `player.left`, and from the launcher `process.started` and
+  `process.exited` (the exit code, and the newest crash report if one
+  appeared). The launcher sees what no hook in the game can: a native crash, a
+  kill, a failure before the mod loads.
+- **Only where the bridge is on.** Nothing is written in a shipped
+  configuration; this is not a way around consent. The file is emptied when a
+  run starts, and the game keeps the last 1000 events for the operation below.
+- **Configuration**, the `events` block of `config/mc_puppet.json`, all keys
+  optional: `"enabled"` (event names to record, `["*"]` for all; by default
+  every warning and error plus `server.ready`, `client.ready`,
+  `client.connected`, `client.connect_failed` and `client.disconnected`),
+  `"sinks"` (`"file"`, the default, and/or `"stdout"`) and `"min_level"`
+  (`info`, `warn` or `error`). A bad block is reported and the defaults used.
+- **The operation is `lifecycle`**, not `events`: `events` already means chat
+  and toasts on the client. `lifecycle {since?, names?, limit?}` answers what is
+  recorded, numbered; ask `since` the last `sequence` you saw.
+
+```bash
+node tools/puppet/puppet.js events --follow            # one line per event, for tail -f or a Monitor
+node tools/puppet/puppet.js wait --event client.connected --timeout 60
+node tools/puppet/puppet.js wait --event server.ready --fail-on "*.crash,*.connect_failed" --timeout 120
+```
+
+`puppet wait --event NAME[,NAME]` (`*` is a wildcard: `client.*`) prints the
+line of the event that ended the wait and exits **0** when a wanted event
+arrived, **1** when a failure event did, **2** on timeout or when there is no
+events file. Without `--fail-on` the failures are any `*.crash`, any
+`*.connect_failed` and a `process.exited` with a non-zero code; `--fail-on`
+replaces that list. `--since N` ignores events up to sequence N, `--dir` picks
+the project. Without `--since`, an events file whose last line is `process.exited`
+is a finished run: `wait` ignores its events (a leftover `client.ready` does not
+match) and goes on waiting for a newer run in it, until the timeout (exit 2); so is a file of a dedicated server (no `client.*` event in it) whose last line is `server.stopped`. `puppet events` takes `--since`, `--name a,b` and `--follow`. With several clients running (`launch client --name bot1,bot2`) both take `--client NAME`: only the events file of the client started under that name (`runs/NAME/`), not the server's and not another client's; it is refused with `--dir`, and when no run directory of that name exists the answer names the places looked in. A client that is closed while it is still connected to a world leaves `process.exited` and no `client.disconnected`; wait for `process.exited` to see it end.
+
+In a scenario the same wait is a step, `{"wait_event": "client.connected",
+"fail_on": "*.crash", "timeout": 60}` (also `since`, `save`, `show`); a failure
+event fails the step at once rather than at the timeout. A worked one is
+`scenarios/wait-for-the-world.json`.
 
 ## For AI coding agents (MCP)
 
@@ -459,12 +668,18 @@ node --test tools/puppet/scenario.test.js   # the scenario language, without a g
   vertex buffers is pixels only; an item's count is on the item, not a text.
 - `move_to` does not find paths. Build the test world flat, or walk in legs.
 - Input enters at the game's own mouse and keyboard handlers, not through the
-  OS: a mod that registers its own GLFW callback does not hear it. The real
+  OS: a mod that registers its own GLFW callback does not hear it, and one
+  that asks GLFW where the cursor is sees the real one. The real
   mouse still works, and moving it over the window during a test moves the
   cursor.
 - While the bridge is on, the game does not pause when its window loses focus
   (a test runs behind other windows). The setting is not saved.
 - `use_entity` and `use_block` are checked by the server like any player's:
   stand within reach.
+- Dev clients have no account: a server they join is in offline mode. A Forge
+  client takes `localhost` to be `::1`, where a server bound to `127.0.0.1` is
+  not listening: say `127.0.0.1`. And a Forge client cannot log in to a server
+  that runs Fabric API, which asks it something at login it never answers;
+  that is between the loaders, and the connection times out after thirty seconds.
 - The client bridge reads what the client knows. For the truth, ask the
   server — that both can be asked in one scenario is the point.

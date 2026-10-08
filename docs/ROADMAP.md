@@ -83,8 +83,12 @@ after it rests on it.
 - [x] **An API for mods**: a mod registers operations of its own, so a test
       reads its state as data instead of parsing what a command printed.
       Unit-tested; **no mod has used it in a running game yet.**
-- [x] **More than one game**: two clients in one scenario, by name.
-      Unit-tested; **two games have not been run side by side yet.**
+- [x] **More than one game**: two clients in one scenario, by name. Run live on
+      2026-09-22, once clients could be made to join a server: `join_server`,
+      and `launch client --name a,b,c --server …` for as many as a test needs,
+      four at once against a server on another machine. The first live run
+      found that `launch` had never written its log on Windows, and that
+      `stop` asked one client to quit N times.
 - [x] **JUnit XML** from the runner, for CI.
 - [x] **Golden screenshots**: compare with a kept image within a tolerance,
       so layout regressions are caught without anyone looking. Unit-tested
@@ -145,15 +149,20 @@ after it rests on it.
       other three jars, and a real *client*, are not tried.
 - [x] The tools are an npm package, `mc-puppet`, with `mc-puppet mcp` for the
       MCP server: packed, installed into an empty directory, run through npx.
-      Not published: that is the owner's to do.
+      (Published since; see the publishing item below.)
 - [x] The README says four targets, and how a Forge or NeoForge dev run takes
       the mod (`modLocalRuntime`, not `run/mods`). The licence is in every
       jar; there is an icon and a changelog; the 1.21.1 jars say `+mc1.21.1`.
-- [ ] A repository the metadata's links can point at. They name
-      `github.com/pain-o-d/mc_puppet`, which does not exist yet.
-- [ ] Published: the package on npm, the mod on Modrinth, which is also its
-      Maven.
-- [ ] An exit of its own for a client started with `pretend_production`.
+- [x] A repository the metadata's links can point at: `github.com/pain-o-d/mc_puppet`
+      is public (CLAUDE.md; `tools/puppet/package.json` and the README name it).
+      Corrected 2026-10-07; it was written here before the repository existed.
+- [x] Published: 0.1.2, a beta, on npm (`mc-puppet`; `package.json` and
+      `mod_version` both say 0.1.2, CHANGELOG has `## 0.1.2`) and on GitHub, and
+      submitted to Modrinth (`mc-puppet`), which is also its Maven. Corrected
+      2026-10-07 from the repository's own files; the registries were not queried.
+- [x] A client started with `pretend_production` has no bridge and is closed by
+      hand; a WARN line in the log says so (a hint only, by the owner's decision
+      of 2026-10-07, not an exit of its own).
 - [x] A developer's dedicated server that has stopped does not leave its
       process behind (`core/Leaving`; see MULTIVERSION.md for why it did).
 
@@ -161,8 +170,13 @@ after it rests on it.
 
 - A server that has MC Puppet on could say so to a client that has it too, and
   the client's bridge could then work there: a test server on another machine,
-  with its owner's word for it. Until something needs that, "this machine and
-  no further" is the whole rule, and it needs no packets.
+  with its owner's word for it. Something did need a test server on another
+  machine (2026-09-22), and a forwarded port was enough: `ssh -L` makes it a
+  server on localhost, with ssh's word for whose it is. "This machine and no
+  further" is still the whole rule, and it still needs no packets.
+- The server's bridge of such a machine is out of reach: its token is a file
+  over there. A scenario's server steps run there or not at all; RCON through
+  the same tunnel does for now.
 
 ## What 1.0.0 waits for
 

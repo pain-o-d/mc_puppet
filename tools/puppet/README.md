@@ -24,12 +24,24 @@ npx mc-puppet client click_widget text=Done
 npx mc-puppet server command '{"command":"time set day"}'
 npx mc-puppet run scenarios/trade.json --junit results.xml
 npx mc-puppet launch client --loader fabric --world my_world   # a dev game through your Gradle wrapper
+npx mc-puppet launch client --name bot1,bot2 --server localhost:25565   # clients of their own, on a server
 npx mc-puppet stop
 ```
 
 `--dir <gameDir>` says where to look, or `MC_PUPPET_DIRS`; a mod project's
 root will do, since `run`, `fabric/run`, `neoforge/run` and `forge/run` under
 it are looked in.
+
+For a consumer's additional development dependencies, `launch --init-script
+pack.gradle` adds an explicit readable init script beside the launcher hook.
+Repeat the option to preserve several scripts in order; relative paths resolve
+from the invoking directory. Parallel first requests share a pending connection
+for the same directory, port, token, PID and protocol. Closing the tools rejects
+their pending requests and destroys that socket; retired socket events cannot
+affect a replacement connection. Sixteen cold concurrent native server-block
+reads passed in a production NeoForge consumer, beside ten real loopback TCP
+regressions. Parallel reads retain the game's single owner for temporal input;
+use `stop` or `release_keys` to cancel held game input explicitly.
 
 ## For AI coding agents
 

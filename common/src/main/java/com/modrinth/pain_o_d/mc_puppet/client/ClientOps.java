@@ -12,10 +12,13 @@ import java.util.stream.Stream;
 
 import com.modrinth.pain_o_d.mc_puppet.core.Args;
 import com.modrinth.pain_o_d.mc_puppet.core.GameJson;
+import com.modrinth.pain_o_d.mc_puppet.core.Gesture;
 import com.modrinth.pain_o_d.mc_puppet.core.Ops;
+import com.modrinth.pain_o_d.mc_puppet.core.Reach;
 import com.modrinth.pain_o_d.mc_puppet.core.Waiter;
 import com.modrinth.pain_o_d.mc_puppet.mixin.HandledScreenAccessor;
 import com.modrinth.pain_o_d.mc_puppet.mixin.MerchantScreenAccessor;
+import com.modrinth.pain_o_d.mc_puppet.mixin.MinecraftClientInvoker;
 import com.modrinth.pain_o_d.mc_puppet.mixin.SliderWidgetAccessor;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -28,6 +31,7 @@ import dev.architectury.platform.Platform;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.ParentElement;
+import net.minecraft.client.gui.screen.DisconnectedScreen;
 import net.minecraft.client.gui.screen.MessageScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
@@ -40,6 +44,7 @@ import net.minecraft.client.gui.widget.CyclingButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
 import net.minecraft.entity.Entity;
@@ -114,6 +119,57 @@ public final class ClientOps {
         ops.now("entities", "{type?, radius?: 16, limit?: 20}", "Entities near the player, nearest first.",
                 args -> entities(client, args));
 
+        ops.add("watch", "{type?, radius?: 32, ticks?: 100, jump?: 1.0, turn?: 45, drawn_only?: true, ai?: true|false}",
+                "Watches the entities near the player every tick for so many ticks (at most 1200) and says how they "
+                        + "moved: appeared, disappeared, blinks (lived five ticks or fewer), the largest step a tick and "
+                        + "jumps (steps over \"jump\" blocks), the sharpest turn and turns over \"turn\" degrees, those "
+                        + "moving with still legs (sliding, sliding_share), floating (held up over air), buried (inside "
+                        + "a block), overlaps (pairs closer than their width), and the worst of each with where and when. "
+                        + "What a screenshot shows one frame of, as numbers a test can hold. With \"drawn_only\" (the "
+                        + "default) only what the renderer would draw counts - a mod may hide an entity behind a stand-in. "
+                        + "Adds the frames while it watched: fps, frame_ms_mean, frame_ms_p95, frame_ms_max, stalls_over_50ms. "
+                        + "\"ai\": false watches only mobs with no brain (a mod's placed bodies and pictures), true only the rest.",
+                args -> {
+                    requirePlayer(client);
+                    String type = Args.string(args, "type", null);
+                    double radius = args.has("radius") ? Args.decimal(args, "radius") : 32;
+                    boolean drawnOnly = Args.flag(args, "drawn_only", true);
+                    net.minecraft.client.render.Frustum everywhere = new net.minecraft.client.render.Frustum(new org.joml.Matrix4f(), new org.joml.Matrix4f()) {
+                        @Override
+                        public boolean isVisible(net.minecraft.util.math.Box box) {
+                            return true;   // what the renderer would draw anywhere round the player, not only in view
+                        }
+                    };
+                    com.modrinth.pain_o_d.mc_puppet.core.Watch watch = new com.modrinth.pain_o_d.mc_puppet.core.Watch(() -> {
+                        java.util.List<net.minecraft.entity.Entity> found = new java.util.ArrayList<>();
+                        if (client.world == null || client.player == null) {
+                            return found;
+                        }
+                        for (net.minecraft.entity.Entity entity : client.world.getEntities()) {
+                            if (entity != client.player && com.modrinth.pain_o_d.mc_puppet.core.Watch.ofType(entity, type)
+                                    && com.modrinth.pain_o_d.mc_puppet.core.Watch.ofAi(entity, args)
+                                    && entity.squaredDistanceTo(client.player) <= radius * radius) {
+                                net.minecraft.util.math.Vec3d eye = client.gameRenderer.getCamera().getPos();
+                                if (!drawnOnly || client.getEntityRenderDispatcher().shouldRender(entity, everywhere, eye.x, eye.y, eye.z)) {
+                                    found.add(entity);
+                                }
+                            }
+                        }
+                        return found;
+                    }, args);
+                    long framesFrom = FrameClock.frames();
+                    long startedNanos = System.nanoTime();
+                    FrameCapture.watching(watch);
+                    return waiter.until("the watch to end", watch.ticks() * 100L + 10_000, () -> {
+                        JsonElement seen = watch.tick();
+                        if (seen instanceof JsonObject summary) {
+                            FrameCapture.watching(null);
+                            FrameClock.since(framesFrom, startedNanos).entrySet().forEach(e -> summary.add(e.getKey(), e.getValue()));
+                        }
+                        return seen;
+                    });
+                });
+
         ops.add("screenshot", "{name?}",
                 "Saves the last frame to screenshots/ and returns {path}. For what data cannot say: overlap, "
                         + "clipping, colour.",
@@ -124,7 +180,7 @@ public final class ClientOps {
         ops.now("click_widget", "{index?: n, text?: substring, button?: 0, modifiers?, direct?: false}",
                 "Clicks a widget at its centre, by index from \"screen\" or by its text, through the game's "
                         + "mouse handler. \"direct\" calls the screen's own method instead, skipping loader events.",
-                args -> clickWidget(client, args));
+                args -> { InputSessions.requireIdle(); return clickWidget(client, args); });
 
         ops.now("click_at", "{x, y} | {slot: n} | {widget: index|text}, button?: 0, "
                         + "modifiers?: [shift|control|alt], direct?: false",
@@ -132,6 +188,7 @@ public final class ClientOps {
                         + "{slot: 2, modifiers: [shift]} is the shift-click a player makes. With no screen open it "
                         + "is a click in the world: the attack or use key.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = pointOf(client, args);
                     double x = at[0];
                     double y = at[1];
@@ -152,6 +209,7 @@ public final class ClientOps {
                 "Moves the cursor there and waits a frame, so that what hovering shows is on screen: a tooltip, "
                         + "a highlight. Follow with tooltip, frame or screenshot.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = pointOf(client, args);
                     Input.moveTo(client, at[0], at[1]);
                     return Input.overTicks(waiter, "a frame", List.of(() -> { }, () -> { }), () -> {
@@ -163,15 +221,19 @@ public final class ClientOps {
                 });
 
         ops.add("drag", "{from: {x,y}|{slot}|{widget}, to: [{x,y}|{slot}|{widget}, …] | {…}, button?: 0, "
-                        + "modifiers?}",
-                "Presses at \"from\", moves through each of \"to\" a tick apart, and releases at the last. With "
-                        + "a stack on the cursor, dragging over slots spreads it, as it does for a player.",
+                        + "modifiers?, steps?: 1}",
+                "Presses at \"from\", moves through each of \"to\" a tick apart (each leg cut into \"steps\" "
+                        + "moves, for a slider or anything that follows the mouse), and releases at the last once a "
+                        + "frame has taken the movement. With a stack on the cursor, dragging over slots spreads it, "
+                        + "as it does for a player. Works behind other windows: the game is told it has focus while "
+                        + "the button is down. In the world, mouse_drag.",
                 args -> drag(client, waiter, args));
 
         ops.now("scroll", "{amount, x?, y?, widget?, slot?}",
                 "Turns the wheel, positive up, over a point, a widget or a slot; by default the middle of the "
                         + "screen. A merchant's list of trades scrolls this way.",
                 args -> {
+                    InputSessions.requireIdle();
                     double[] at = args.has("x") || args.has("widget") || args.has("slot")
                             ? pointOf(client, args)
                             : new double[] {client.getWindow().getScaledWidth() / 2.0,
@@ -182,7 +244,7 @@ public final class ClientOps {
 
         ops.now("click_slot", "{slot, button?: 0, action?: PICKUP|QUICK_MOVE|SWAP|CLONE|THROW|PICKUP_ALL}",
                 "Clicks a container slot as the player would; QUICK_MOVE is shift-click.",
-                args -> clickSlot(client, args));
+                args -> { InputSessions.requireIdle(); return clickSlot(client, args); });
 
         ops.now("select_trade", "{index}", "Selects a merchant's offer, as clicking it in the list does.",
                 args -> selectTrade(client, args));
@@ -195,6 +257,9 @@ public final class ClientOps {
                 args -> {
                     int code = VirtualKeys.code(Args.string(args, "key"));
                     String action = Args.string(args, "action", "tap");
+                    Input.modifiers(args); // Resolve the whole request before revoking or pressing anything.
+                    if (action.equals("release")) InputSessions.revoke("a key was released");
+                    else InputSessions.requireIdle();
                     return Input.withModifiers(args, () -> {
                         if (!action.equals("release")) {
                             Input.key(client, code, true);
@@ -210,6 +275,7 @@ public final class ClientOps {
                 "Focuses a text field and sets what it holds, as if typed over: its listeners hear it. For a "
                         + "field among several; \"type\" goes to whichever has focus.",
                 args -> {
+                    InputSessions.requireIdle();
                     Screen screen = requireScreen(client);
                     if (!(widgetBy(screen, Args.string(args, "widget")) instanceof TextFieldWidget field)) {
                         throw new Ops.Refused("that widget is not a text field");
@@ -220,12 +286,13 @@ public final class ClientOps {
                 });
 
         ops.now("release_keys", "{}", "Lets go of every key a test is holding.", args -> {
-            VirtualKeys.releaseAll();
+            InputSessions.releaseAll(client, "input was released");
             return JsonNull.INSTANCE;
         });
 
         ops.now("type", "{text}", "Types text, through the game's keyboard handler, into whatever has focus.",
                 args -> {
+                    InputSessions.requireIdle();
                     Input.type(client, Args.string(args, "text"));
                     return JsonNull.INSTANCE;
                 });
@@ -252,9 +319,10 @@ public final class ClientOps {
 
         ops.now("use_entity", "{uuid? | type?, radius?: 6}",
                 "Looks at and right-clicks an entity: by uuid, or the nearest of a type. Opens a villager.",
-                args -> useEntity(client, args));
+                args -> { InputSessions.requireIdle(); return useEntity(client, args); });
 
         ops.now("use_block", "{x, y, z, side?: up}", "Looks at and right-clicks a block.", args -> {
+            InputSessions.requireIdle();
             ClientPlayerEntity player = requirePlayer(client);
             BlockPos pos = new BlockPos(Args.integer(args, "x"), Args.integer(args, "y"), Args.integer(args, "z"));
             Direction side = Direction.byName(Args.string(args, "side", "up"));
@@ -264,12 +332,40 @@ public final class ClientOps {
                     new BlockHitResult(centre, side == null ? Direction.UP : side, pos, false)).toString());
         });
 
-        ops.now("use_item", "{}", "Right-clicks with the held item.", args -> new JsonPrimitive(
-                client.interactionManager.interactItem(requirePlayer(client), Hand.MAIN_HAND).toString()));
+        ops.now("use_item", "{}", "Right-clicks with the held item.", args -> {
+            InputSessions.requireIdle();
+            return new JsonPrimitive(client.interactionManager.interactItem(requirePlayer(client), Hand.MAIN_HAND).toString());
+        });
 
-        ops.now("hotbar", "{slot: 0-8}", "Selects a hotbar slot.", args -> {
-            requirePlayer(client).getInventory().selectedSlot = Math.max(0, Math.min(8, Args.integer(args, "slot")));
-            return JsonNull.INSTANCE;
+        ops.add("hotbar", "{slot: 0-8}", "Selects a hotbar slot and completes vanilla slot synchronization.", args -> {
+            ClientPlayerEntity player = requirePlayer(client);
+            int desired = Math.max(0, Math.min(8, Args.integer(args, "slot")));
+            if (client.currentScreen != null) throw new Ops.Refused("a screen is open; close_screen before hotbar");
+            if (client.interactionManager == null) throw new Ops.Refused("no client interaction manager is ready");
+            // Do not press potentially unbound/remapped/shared keys: use vanilla's selection seam.
+            // A single sync of the desired slot cannot repair an already-desired stale cache.
+            var sync = (com.modrinth.pain_o_d.mc_puppet.mixin.ClientPlayerInteractionManagerInvoker)
+                    client.interactionManager;
+            var session = InputSessions.begin(client, "hotbar synchronization", true, false, () -> { });
+            int[] stage = {0};
+            return session.track(waiter.until("vanilla hotbar synchronization", 5000, () -> {
+                session.check();
+                if (stage[0]++ == 0) {
+                    player.getInventory().selectedSlot = (desired + 1) % 9;
+                    // Atomic on the game thread: no gameplay tick sees the intermediate hand.
+                    try { sync.mc_puppet$syncSelectedSlot(); }
+                    finally { player.getInventory().selectedSlot = desired; }
+                    session.check();
+                    sync.mc_puppet$syncSelectedSlot();
+                } else if (stage[0] == 2) {
+                    return null; // Include a subsequent native tick before reporting completion.
+                } else {
+                    if (player.getInventory().selectedSlot != desired)
+                        throw new IllegalStateException("the selected slot changed during synchronization");
+                    return JsonNull.INSTANCE; // Client synchronization boundary, not server acknowledgement.
+                }
+                return null;
+            }));
         });
 
         // ---- getting there ----------------------------------------------------
@@ -295,6 +391,11 @@ public final class ClientOps {
             return JsonNull.INSTANCE;
         });
 
+        ops.now("join_server", "{address: localhost[:port]}",
+                "Joins a server on this machine, or one whose port was brought here (ssh -L). Follow with "
+                        + "wait {for: world}, which says why if the server turns the player away.",
+                args -> joinServer(client, args));
+
         ops.now("leave_world", "{}", "Saves and leaves to the title screen. Follow with wait {for: no_world}.",
                 args -> {
                     if (client.world == null) {
@@ -316,8 +417,11 @@ public final class ClientOps {
             return JsonNull.INSTANCE;
         });
 
-        ops.now("window", "{width?, height?, gui_scale?: 0-4}",
-                "Resizes the window and sets the GUI scale (0 is auto). Returns the scaled size.",
+        ops.now("window", "{width?, height?, gui_scale?: 0-4, focused?: true|false}",
+                "Resizes the window and sets the GUI scale (0 is auto). Returns the scaled size, and whether the "
+                        + "game believes its window has focus. \"focused\" tells it the window gained or lost "
+                        + "focus, as the system's focus event does, to try a test as it runs behind other windows; "
+                        + "the next real focus event overrides it.",
                 args -> window(client, args));
 
         ops.add("wait",
@@ -367,6 +471,7 @@ public final class ClientOps {
         info.addProperty("development", com.modrinth.pain_o_d.mc_puppet.McPuppet.development());
         info.addProperty("minecraft", net.minecraft.SharedConstants.getGameVersion().getName());
         info.addProperty("loader", dev.architectury.platform.Platform.isFabric() ? "fabric" : com.modrinth.pain_o_d.mc_puppet.compat.Compat.OTHER_LOADER);
+        info.addProperty("username", client.getSession().getUsername());
         info.addProperty("in_world", client.world != null && client.player != null);
         info.addProperty("singleplayer", client.isInSingleplayer());
         // True on a server that is not on this machine, where nearly everything is refused: see core/Reach.
@@ -388,6 +493,7 @@ public final class ClientOps {
         window.addProperty("scaled_width", client.getWindow().getScaledWidth());
         window.addProperty("scaled_height", client.getWindow().getScaledHeight());
         window.addProperty("gui_scale", client.getWindow().getScaleFactor());
+        window.addProperty("focused", ((MinecraftClientInvoker) client).mc_puppet$windowFocused());
         return window;
     }
 
@@ -799,7 +905,36 @@ public final class ClientOps {
         return json;
     }
 
+    /**
+     * To a server on this machine and to no other. Anywhere else the bridge would go deaf the
+     * moment the player arrived (see {@link Reach}), and a program that can send a player's game
+     * and account to an address of its choosing is nothing a test needs.
+     */
+    private static JsonElement joinServer(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        String address = Args.string(args, "address").trim();
+        if (!ServerAddress.isValid(address)) {
+            throw new Ops.Refused("\"" + address + "\" is not an address; localhost:25565 is one");
+        }
+        ServerAddress parsed = ServerAddress.parse(address);
+        String refused = Reach.refusalToJoin(parsed.getAddress());
+        if (refused != null) {
+            throw new Ops.Refused(refused);
+        }
+        requireLoaded(client);
+        if (client.world != null) {
+            throw new Ops.Refused("a world is loaded; leave_world first");
+        }
+        com.modrinth.pain_o_d.mc_puppet.compat.ClientCompat.joinServer(client, parsed, address);
+        JsonObject json = new JsonObject();
+        json.addProperty("host", parsed.getAddress());
+        json.addProperty("port", parsed.getPort());
+        return json;
+    }
+
     private static JsonElement window(MinecraftClient client, JsonObject args) throws Ops.Refused {
+        if (args.has("focused")) {
+            client.onWindowFocusChanged(Args.flag(args, "focused", true));
+        }
         if (args.has("width") || args.has("height")) {
             client.getWindow().setWindowedSize(
                     Math.max(320, Args.integer(args, "width", client.getWindow().getWidth())),
@@ -833,9 +968,15 @@ public final class ClientOps {
                         () -> client.currentScreen == null ? new JsonPrimitive(true) : null);
             case "world":
                 // Playable: a player in a world, and no loading screen over it.
-                return waiter.until("a world to be playable", timeout,
-                        () -> client.world != null && client.player != null && client.currentScreen == null
-                                ? new JsonPrimitive(client.player.getGameProfile().getName()) : null);
+                return waiter.until("a world to be playable", timeout, () -> {
+                    // A server that said no has said why, and no amount of waiting turns that into a world.
+                    if (client.world == null && client.currentScreen instanceof DisconnectedScreen turnedAway) {
+                        throw new java.util.concurrent.CompletionException(new Ops.Refused(
+                                "there will be no world: " + turnedAway.getNarratedTitle().getString()));
+                    }
+                    return client.world != null && client.player != null && client.currentScreen == null
+                            ? new JsonPrimitive(client.player.getGameProfile().getName()) : null;
+                });
             case "loaded":
                 // After a resource reload (F3+T, a resource pack), until the splash is gone.
                 return waiter.until("the game to finish loading its resources", timeout,
@@ -956,6 +1097,7 @@ public final class ClientOps {
             throw new Ops.Refused("\"to\" names no place");
         }
         int button = Input.buttonOf(args);
+        int legSteps = Math.max(1, Math.min(200, Args.integer(args, "steps", 1)));
         List<Integer> modifiers = new ArrayList<>();
         if (args.has("modifiers") && args.get("modifiers").isJsonArray()) {
             for (JsonElement each : args.getAsJsonArray("modifiers")) {
@@ -968,16 +1110,21 @@ public final class ClientOps {
             Input.moveTo(client, from[0], from[1]);
             Input.button(client, button, true);
         });
-        for (double[] point : path) {
+        // A pixel's move where it was pressed, as a hand's never-quite-still press makes: a screen hears
+        // a drag begin where the button went down (a stack spread over slots starts on the first).
+        steps.add(() -> Input.moveBy(client, 1, 0));
+        for (double[] point : Gesture.legs(from, path, legSteps)) {
             steps.add(() -> Input.moveTo(client, point[0], point[1]));
         }
         double[] last = path.get(path.size() - 1);
-        steps.add(() -> {
-            Input.moveTo(client, last[0], last[1]);
+        Runnable letGo = () -> {
             Input.button(client, button, false);
             modifiers.forEach(VirtualKeys::release);
-        });
-        return Input.overTicks(waiter, "the drag to finish", steps, () -> new JsonPrimitive(path.size()));
+        };
+        return Input.gesture(client, waiter, "the drag to finish", steps, 0, () -> {
+            Input.moveTo(client, last[0], last[1]);
+            letGo.run();
+        }, () -> new JsonPrimitive(path.size()), letGo);
     }
 
     private static Screen requireScreen(MinecraftClient client) throws Ops.Refused {

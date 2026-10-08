@@ -76,6 +76,32 @@ public final class ServerOps {
                 "Entities, nearest first when \"near\" is given. \"offers\" adds a merchant's trades.",
                 args -> entities(server, args));
 
+        ops.add("watch", "{dimension?, type?, near?: {x,y,z,radius}, ticks?: 100, jump?: 1.0, turn?: 45, ai?: true|false}",
+                "Watches entities every tick for so many ticks (at most 1200) and says how they moved, as the "
+                        + "client's watch does: appeared, disappeared, blinks, steps and jumps, turns, sliding, "
+                        + "floating, buried, overlaps, and the worst of each. Reads the world's entity list only - no "
+                        + "box query, which a mod could answer.",
+                args -> {
+                    ServerWorld world = world(server, args);
+                    String type = Args.string(args, "type", null);
+                    JsonObject near = args.has("near") && args.get("near").isJsonObject() ? args.getAsJsonObject("near") : null;
+                    Vec3d centre = near == null ? null : new Vec3d(Args.decimal(near, "x"), Args.decimal(near, "y"), Args.decimal(near, "z"));
+                    double radius = near != null && near.has("radius") ? Args.decimal(near, "radius") : 16;
+                    com.modrinth.pain_o_d.mc_puppet.core.Watch watch = new com.modrinth.pain_o_d.mc_puppet.core.Watch(() -> {
+                        List<Entity> found = new ArrayList<>();
+                        for (Entity entity : world.iterateEntities()) {
+                            if (com.modrinth.pain_o_d.mc_puppet.core.Watch.ofType(entity, type)
+                                    && com.modrinth.pain_o_d.mc_puppet.core.Watch.ofAi(entity, args)
+                                    && !(entity instanceof net.minecraft.entity.player.PlayerEntity)
+                                    && (centre == null || entity.getPos().squaredDistanceTo(centre) <= radius * radius)) {
+                                found.add(entity);
+                            }
+                        }
+                        return found;
+                    }, args);
+                    return waiter.until("the watch to end", watch.ticks() * 100L + 10_000, watch::tick);
+                });
+
         ops.now("entity", "{uuid, nbt?: false, offers?: true}", "One entity; \"nbt\" adds its saved data as text.",
                 args -> entity(server, args));
 

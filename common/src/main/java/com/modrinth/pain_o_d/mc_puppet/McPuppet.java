@@ -74,6 +74,13 @@ public final class McPuppet {
     }
 
     public static void init() {
+        if (Boolean.getBoolean("mc_puppet.pretend_production")) {
+            // A hint only: nothing here changes what the rules decide. Such a game has no bridge,
+            // so nothing can ask it to quit.
+            LOGGER.warn("MC Puppet: -Dmc_puppet.pretend_production=true is set. The bridge is "
+                    + "intentionally OFF in this run, so no test can drive or quit it: close the "
+                    + "game window by hand.");
+        }
         PuppetConfig config = PuppetConfig.load(Platform.getConfigFolder(), development(),
                 Platform.getGameFolder(), com.modrinth.pain_o_d.mc_puppet.core.Consent.home());
         if (config.refusedForWantOfConsent()) {
@@ -92,6 +99,8 @@ public final class McPuppet {
                     + "or with -Dmc_puppet.enabled=true.");
             return;
         }
+        // Before anything it reports on: the bus is on for this process, as the config says.
+        com.modrinth.pain_o_d.mc_puppet.core.Events.start(config, Platform.getGameFolder());
 
         LifecycleEvent.SERVER_STARTED.register(server -> {
             try {
@@ -119,6 +128,7 @@ public final class McPuppet {
             }
         });
         TickEvent.SERVER_POST.register(server -> SERVER_WAITER.tick());
+        com.modrinth.pain_o_d.mc_puppet.server.ServerEvents.init();
 
         if (Platform.getEnvironment() == Env.CLIENT) {
             // Inside the branch, so that a dedicated server never runs the

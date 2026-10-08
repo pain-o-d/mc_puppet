@@ -94,6 +94,7 @@ public final class Bridge implements AutoCloseable {
     public static Bridge open(String side, Ops ops, int port, Path gameDir) throws IOException {
         ServerSocket socket = bind(port);
         String token = newToken();
+        Events.addSecret(token);
         Path directory = gameDir.resolve("mc_puppet");
         Files.createDirectories(directory);
         keepToTheOwner(directory, "rwx------");

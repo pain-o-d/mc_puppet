@@ -42,6 +42,20 @@ class ReachTest {
     }
 
     @Test
+    @DisplayName("a client is sent to localhost or a loopback address written out, and to no name that would have to be looked up")
+    void whereAClientIsSent() {
+        for (String host : new String[] {"localhost", "LOCALHOST", " localhost ", "127.0.0.1", "127.8.9.10", "127.1",
+                "::1", "[::1]", "0:0:0:0:0:0:0:1"}) {
+            assertNull(Reach.refusalToJoin(host), host);
+        }
+        for (String host : new String[] {"192.168.1.5", "203.0.113.7", "0.0.0.0", "play.example.org",
+                "localhost.example.org", "127.0.0.1.example.org", "beelink", "fe80::1", "not:an:address", "", null}) {
+            assertNotNull(Reach.refusalToJoin(host), host + " is not this machine, or cannot be told to be");
+        }
+        assertTrue(Reach.refusalToJoin("beelink").contains("ssh -L"), "the refusal says how a test server is reached");
+    }
+
+    @Test
     @DisplayName("elsewhere, only what tells, lets go and leaves still answers")
     void whatAnswersElsewhere() {
         for (String op : new String[] {"info", "help", "stop", "release_keys", "leave_world", "quit"}) {

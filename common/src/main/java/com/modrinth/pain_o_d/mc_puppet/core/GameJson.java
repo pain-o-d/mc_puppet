@@ -138,7 +138,8 @@ public final class GameJson {
         json.addProperty("uuid", entity.getUuidAsString());
         json.addProperty("type", Registries.ENTITY_TYPE.getId(entity.getType()).toString());
         json.add("pos", pos(entity.getPos()));
-        if (entity.hasCustomName()) {
+        // A player's name is who they are: with several on a server, a test has to say which it means.
+        if (entity.hasCustomName() || entity instanceof net.minecraft.entity.player.PlayerEntity) {
             json.addProperty("name", entity.getName().getString());
         }
         json.addProperty("yaw", Math.round(entity.getYaw() * 10) / 10.0);
@@ -154,6 +155,9 @@ public final class GameJson {
             json.add("passengers", riders);
         }
         if (entity instanceof net.minecraft.entity.LivingEntity living) {
+            if (living.isBaby()) {
+                json.addProperty("baby", true);   // a child's size is part of what a player sees
+            }
             json.addProperty("health", living.getHealth());
             json.addProperty("max_health", living.getMaxHealth());
             JsonObject equipment = new JsonObject();

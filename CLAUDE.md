@@ -3,12 +3,16 @@
 Lets a program on the same machine see and drive a running game, for testing
 mods. Read `README.md` first: it is the user-facing truth, including the
 safety model, and must stay true.
+Then `docs/handover.md`: what is on `develop` and unreleased, what was seen
+running and what was not, and what waits for the owner. Keep it current in the
+same commit as the change it describes.
 
-Multi-loader mod built on **Architectury** for **Minecraft 1.21.1**, shipping
-to **Fabric** and **NeoForge** from one shared codebase. Same toolchain, same
-pinned versions and the same network workaround as its sibling `../get_rich`,
-whose `CLAUDE.md` explains the workaround in full
-(`tools/fetch-architectury.sh`; plugin versions pinned exactly).
+Multi-loader mod built on **Architectury** for **Minecraft 1.21.1** (Fabric,
+NeoForge) and **1.20.1** (Fabric, Forge) from one shared codebase. Skeleton,
+pins, ports, the network workaround, gitflow and what is never committed:
+**as the workspace** (`../CLAUDE.md`). Unlike its siblings this project keeps
+its `tools/` self-contained and refers to nothing outside its repository: it
+is a published product, and the tools ship on npm.
 
 ## Layout
 
@@ -17,7 +21,7 @@ whose `CLAUDE.md` explains the workaround in full
 | `common/…/core/` | Plain Java, no game: `Protocol` (wire + token), `Ops` (registry, `help`, `batch`), `Waiter` (tick-driven waits), `Bridge` (the socket), `PuppetConfig`, `Args`. `GameJson` is the one class here that touches the game. |
 | `common/…/client/` | `ClientOps`, `ChatLog`, `PuppetClient`. **Nothing on a dedicated server may load these**; `McPuppet.init` reaches them only inside an environment check. |
 | `common/…/server/` | `ServerOps`. |
-| `common/…/mixin/` | Two client accessor mixins. No injections anywhere, on purpose. |
+| `common/…/mixin/` | Client accessors and invokers (input enters at `Mouse` and `Keyboard`), and a few injections, each `require = 0` and doing nothing unless a test is doing something (a key held, a frame recorded, a mouse gesture). |
 | `fabric/`, `neoforge/` | Entry points and metadata only. |
 | `tools/puppet/` | `lib.js` (discovery + connection), `scenario.js` (the scenario language), `puppet.js` (CLI), `mcp.js` (MCP server). No dependencies. |
 | `scenarios/` | Worked examples, runnable against a dev client. |
@@ -32,6 +36,7 @@ Base package `com.modrinth.pain_o_d.mc_puppet`, mod id `mc_puppet`.
 node --test tools/puppet/scenario.test.js
 ./gradlew :fabric:runClient        # bridge on, player "Puppet", window opens
 ./gradlew :fabric:runServer        # dedicated; eula and offline mode live in fabric/run/
+node tools/puppet/puppet.js --dir . launch client --name bot1,bot2 --server localhost:25565   # fabric/runs/<name>, client@bot1
 tools/stop-dev-server.sh           # clear orphaned dev JVMs of this project
 
 P="node tools/puppet/puppet.js --dir ."
@@ -80,6 +85,12 @@ else it is off until told otherwise. Never change that default.
 - **The game describes itself.** A new operation is one `ops.now(name, args,
   does, …)`; `help` and the MCP server pick it up. Keep `args` and `does`
   accurate — they are the documentation.
+- **`join_server` goes to a loopback address and nowhere else**, by the same
+  rule as `Reach` and for the same reason. A remote test server is a forwarded
+  port. Do not add a way round it; there is no need for one.
+- **`launch` never edits the project it starts.** What a named client needs —
+  its run directory, its player's name, the bridge switched on — goes through
+  `tools/puppet/launch.init.gradle`. It is in the npm package's `files`.
 - **Entities: only the living.** A mob killed this tick is in the world for
   another second. The first live scenario failed on exactly that.
 - **Test against a game, not just compile.** The scenario in `scenarios/` is
@@ -89,12 +100,17 @@ else it is off until told otherwise. Never change that default.
 
 Verified on Fabric 1.21.1: client bridge (screens, clicks, world creation,
 trading, screenshot, quit), server bridge inside single-player and on a
-dedicated server (no client class loaded). **NeoForge builds and has not been
-launched.**
+dedicated server (no client class loaded). Since then, and by 2026-09-21: the
+scenarios on all four targets (1.21.1 Fabric and NeoForge, 1.20.1 Fabric and
+Forge) in development environments; the built jar in a real NeoForge 1.21.1
+server (`tools/prod-check.js`); the live bridge attacked
+(`tools/attack-check.js`). And on 2026-09-22 `join_server` and named clients on all four: 1.21.1
+against a real Fabric server on another machine through `ssh -L` (four clients
+at once), 1.20.1 against dev servers here. **Not tried:** the other three jars
+outside a development environment, and a real client from a launcher.
 
-## Git workflow
-
-Gitflow, as in `../get_rich`: `main` is releases, work happens on `develop`,
-`feature/*` and `bugfix/*` merge with `--no-ff`, Conventional Commits.
-
-Never commit `run/`, `build/`, or `.claude/settings.local.json`.
+**Published**: 0.1.2, a beta, on npm (`mc-puppet`), on GitHub
+(`pain-o-d/mc_puppet`, public) and submitted to Modrinth (`mc-puppet`).
+**`docs/RELEASING.md` is how**, with the reason beside every rule; read it
+before touching a version number. `docs/ROADMAP.md` has what an independent
+security review found and what 1.0.0 waits for.

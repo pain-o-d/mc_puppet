@@ -84,8 +84,20 @@ around them.
 | `Compat.OTHER_LOADER` | forge | neoforge |
 | `ClientCompat.updateCrosshair` | `updateTargetedEntity` | `updateCrosshairTarget` |
 | `ClientCompat.openWorld` / `createWorld` | a parent screen first; no parent | a cancel callback; a parent |
+| `ClientCompat.joinServer` | `gui.screen.ConnectScreen`, a `ServerInfo` that is or is not local | `gui.screen.multiplayer`, a server type, and a cookie store to pass |
+| `ClientCompat.isConnecting` | `gui.screen.ConnectScreen` | `gui.screen.multiplayer.ConnectScreen`; the lifecycle events use it to tell a connect that failed from one that is still going |
+| `mixin/compat/DisconnectedScreenAccessor` | reads `reason: Text` | reads `info: DisconnectionInfo` |
+| `ClientCompat.disconnectReason` | the accessor's `Text`, as a string | `info().reason()` of the accessor's `DisconnectionInfo`, as a string; the lifecycle events use it for what a disconnect said |
 | `ClientCompat.onSound` | two arguments | three |
 | `ClientCompat.sidebarOf` / `linesOf` | slot 1, `ScoreboardPlayerScore` | an enum, `ScoreboardEntry` |
+
+**Gson's `JsonObject.isEmpty()` is absent on 1.20.1.** The Gson that version
+ships predates it, so shared code that touches a `JsonObject` (the lifecycle
+events' config and data) must not call it; use `size()` or `entrySet()`, which
+both versions have. Not a `compat` seam, since the shared form works on both;
+recorded so nobody "tidies" it back to `isEmpty()` and breaks the 1.20.1 build.
+Both builds compile and the unit tests pass on both; no event was seen firing
+in a running 1.20.1 game.
 
 **Mixins turned out not to need forking**, which was the surprise. The two
 that named something version-specific were made not to: `DrawContextMixin`
@@ -96,6 +108,30 @@ a long in the other. The sprite hooks name a method 1.20.1 does not have; they
 are optional, and the build says "Cannot remap drawGuiTexture" and goes on.
 
 ## What only running it found
+
+The 2026-10-03 temporal-input repair shares `InputSession`, its client adapter
+and `ClientPlayerInteractionManagerInvoker` between both versions. Source
+inspection found the same `syncSelectedSlot()V` descriptor and vanilla cached
+slot/packet path on 1.20.1 and 1.21.1; the invoker is listed only in each
+build's client mixins. Revision 1 built all four and passed 83 core tests per
+version. Its first Fabric live suites passed, but subsequent save-transport
+and mining attempts failed as recorded in the handover. Revision 2 changes
+`break_block` to ordinary owned attack input. All four current builds/remap
+checks passed, with 83 core tests on each version and 33 launcher/scenario
+checks. Fresh development clients on all four targets each passed 169 scenario
+steps and 83 native input checks, including the unchanged 10--25 native-tick
+hand-mining assertion, authoritative slot readbacks after normal reopen,
+pending-input cancellation, overlap refusal and screen-change cleanup. Each
+saved and quit normally; owned PIDs, bridge ports and the Loom lock were gone.
+See the handover for the independently audited evidence and preserved failed
+attempts. A later production NeoForge 1.21.1 consumer reproduced the stale
+client/server hand and verified same-slot repair with complete inventory
+conservation. After the independent Node connection repair it also completed
+16 cold concurrent native server-block reads and genuine two-USE rope coupling
+with exactly one item consumed. Those consumer checks extend NeoForge 1.21.1
+evidence only. Its subsequent hoist attempt refused before motion; all final
+owned game processes closed normally, ports/Loom were clear. The Node transport
+repair changes no version-specific Java seam, protocol 1 or Bridge security.
 
 - **A dedicated dev server never exits.** Found by a mod that uses this one,
   on the first day it ran a 1.20.1 server, and then seen on every target:

@@ -1,0 +1,239 @@
+# Backlog
+ **Done** 2026-10-07: `ServerEvents` (Architectury lifecycle + player events), `CrashEvents` + `CrashReportMixin` (`require = 0`), both builds green.
+Numbered tasks, each small enough for one fresh session. A task keeps its
+number for life; other documents cite it. State lives in `handover.md`
+(`## Now`); this file is the plan.
+ **Done** 2026-10-07: `ClientEvents`, `ClientCompat` twins, `DisconnectedScreenAccessor`, both builds green.
+## Task 1 — Lifecycle events: a pushed, filterable record of what the game and server did
+
+Status: **done** 2026-10-07 (slices 1A-1E, seen running on Fabric 1.21.1; see task 6). Owner: nobody. Ordering: 1 first;
+2, 3 and 4 are independent after it (disjoint write areas); 5 last.
+
+### Why
+
+A test run today learns that a server died or a client could not join by
+waiting for a timeout and then reading a log. Two real cases from this
+month: a dedicated server that crashed on start (`AccessDeniedException`
+on a native library, then an NPE in `stopServer`), and a client left on
+"connection lost" that nothing reported. The caller cannot sleep on the
+game; it should be woken by an event. `EventLog` (chat and toasts, read
+with a `since` sequence) already exists in the client; this extends the
+idea to lifecycle, to the server side, and to a file a process can watch.
+
+### What to build
+
+**One event shape**, one JSON object per line:
+
+```json
+{"seq":12,"ts":"2026-10-07T17:08:12.431Z","side":"server","name":"server.crash","level":"error","data":{"report":"crash-reports/crash-2026-10-07_17.08.12-server.txt","cause":"AccessDeniedException: ...sable_rapier_x86_64_windows.dll"}}
+```
+
+`side` is `client`, `server` or `launcher` (task 4). `level` is `info`,
+`warn` or `error`. `data` is small: ids, reasons, paths. Never a log.
+
+**Event names (first set):**
+
+| Side | Names |
+|---|---|
+| server | `server.starting`, `server.ready`, `server.stopping`, `server.stopped`, `server.crash` (report path + first cause line), `mod.load_failed` (mod id + message, where the game gets that far), `player.joined`, `player.left` |
+| client | `client.ready` (main menu or world loaded), `client.connecting` (address), `client.connected`, `client.connect_failed` (reason, as the disconnect screen would say it: incompatible mods, timeout, refused, `connection lost`), `client.disconnected` (reason), `client.crash` |
+| launcher | `process.started`, `process.exited` (exit code, last crash report if newer than the start) |
+
+`client.connect_failed` is a disconnect that happens before the play
+state is reached; `client.disconnected` is one after it. A failed connect
+**must** produce its event: that is the case the owner asked for.
+
+**Configuration** in `config/mc_puppet.json` (same file, same loader as
+the bridge settings; no second consent key, see CLAUDE.md):
+
+```json
+"events": { "enabled": ["server.crash","client.connect_failed","client.disconnected"],
+            "sinks": ["file"], "min_level": "info" }
+```
+
+- Default when the bridge is on: every name with level `warn` or `error`
+  plus `server.ready`, `client.ready`, `client.connected`,
+  `client.connect_failed`, `client.disconnected`. `enabled: ["*"]` means all.
+- Sinks: `file` (default: `<run dir>/mc_puppet/events.jsonl`, appended,
+  truncated at start of a run, so a watcher reads only this run) and
+  `stdout`. **No webhook and no network sink**: loopback-only is the
+  product's licence to exist; a caller that wants a push reads the file or
+  the bridge.
+- **Events exist only where the bridge is on**; nothing is written in a
+  shipped config. This is not a new way past consent.
+- The bridge also serves them: an `events` operation (`since`, `names`,
+  `limit`) beside the existing event log, so a connected tool can read the
+  same sequence. Adding an operation does not raise `Protocol.VERSION`.
+
+**CLI:** `puppet events [--dir D] [--since N] [--follow] [--name a,b]`
+prints the file (follows with `--follow`; one line per event, built for
+`tail -f` and Claude Code's `Monitor`). `puppet wait --event NAME[,NAME]
+[--fail-on NAME[,NAME]] --timeout S` exits 0 when a wanted event arrives,
+1 on a `--fail-on` event (default: any `*.crash`, `client.connect_failed`,
+`process.exited` with a non-zero code), 2 on timeout, and prints that
+event's line either way. The scenario language gets a step with the same
+meaning (`wait_event`).
+
+### Slices (disjoint write areas)
+
+| Slice | Write area | Notes |
+|---|---|---|
+| 1A event bus | `core/Events.java` (new), `PuppetConfig`, `Bridge`/`Ops` (`events` op), unit tests in `CoreTest` | plain Java, no game; the file sink and the config parse are tested here. Build 1A first and fix the line format. |
+| 1B server hooks | `server/` + a mixin or loader event where the game writes a crash report; `compat/` where versions differ | `server.crash` must still be written when `stopServer` itself throws. Hooks are `require = 0` mixins like the rest. |
+| 1C client hooks | `client/` + `compat/ClientCompat` (both versions, twin files) | connect start, play state reached, disconnect with reason (the disconnect screen's text), client crash. A dedicated server must not load these classes. |
+| 1D CLI watcher (**done 2026-10-07**: events.js, supervise.js, `puppet wait`/`events`, scenario `wait_event`, launcher records process.started/exited; npm test 99 pass) | `tools/puppet/` only (`puppet.js`, `lib.js`, `launch.js`, `scenario.js`) | the **launcher** side: `launch` spawns the JVM, so it sees what no in-game hook can (a native crash, a kill, a failure before the mod loads). It writes `process.started` / `process.exited` to the same file, and on exit copies the newest crash report path newer than the start. Needs only the line format from 1A. |
+| 1E docs and proof | README, `docs/handover.md`, `docs/MULTIVERSION.md`, CHANGELOG, a scenario | last. |
+
+### Acceptance
+
+- Unit tests: config defaults and `enabled`/`min_level` filtering; the
+  file sink truncates per run; sequence is monotonic; a bad `events` block
+  keeps the defaults and logs one warning.
+- On all four targets (1.21.1 Fabric and NeoForge, 1.20.1 Fabric and
+  Forge), by running, not by reading:
+  1. a dedicated server started and stopped normally gives `server.starting`,
+     `server.ready`, `server.stopping`, `server.stopped`, in order;
+  2. a client joining it gives `client.connecting`, `client.connected`,
+     `player.joined`; leaving gives `client.disconnected` and `player.left`;
+  3. a client pointed at a stopped port, and a client refused for a mod
+     mismatch, each give `client.connect_failed` with a reason;
+  4. a server killed while a client is on it gives `client.disconnected`
+     (reason `connection lost` or the screen's text) on the client and, from
+     the launcher, `process.exited` with a non-zero code;
+  5. a server made to crash on start (a jar in `mods/` that throws) gives
+     `process.exited` from the launcher with the crash report path, even
+     though no in-game hook ran;
+  6. `puppet wait --event client.connected --timeout 60` returns 0 in case 2
+     and 1 in case 3, without sleeping to the timeout.
+- Security read twice: nothing here widens the bridge, no new bind, no
+  network sink, no read of files outside the run directory; the reason text
+  is cut and carries no token or password.
+- `tools/build-all.sh` green; both scenarios still pass.
+
+### Notes for whoever implements it
+
+- The existing `EventLog` is a ring buffer of chat and toasts with a
+  sequence. Reuse its idea and its `since` semantics; do not fold chat into
+  lifecycle events (different volume, different consumers). Keep the answer
+  small, as every operation is (CLAUDE.md, "paid for by the token").
+- What the **launcher** adds is the point. An in-game hook cannot report a
+  crash that kills the JVM before or while it runs; without 1D the original
+  case (a failure on start) is not caught.
+- A mod-load failure usually happens before `McPuppet.init`; report it from
+  the launcher by reading the crash report, not from a hook.
+- Version seams (disconnect screen class, connection state names) go in
+  `compat/`, in both files; shared code never asks which version it is on.
+
+## Task 2 — Node tests in the build and CI, and tests for `mcp.js` and `junit.js`
+
+Status: **done** 2026-10-07 (not committed when written). Write area:
+`tools/puppet/`, `tools/build-all.sh`.
+
+What was wrong: `tools/build-all.sh` ran only `scenario.test.js`, while
+`tools/puppet/package.json` named scenario, launch and connection tests; and
+`mcp.js` and `junit.js` had no test. CI (`.github/workflows/build.yml`) calls
+`tools/build-all.sh`, so fixing the script fixes CI; the workflow itself
+needed no change. The Java `:common:test` already runs in `build-all.sh` (it
+runs the unit tests of each build), so it was not added.
+
+- A. `build-all.sh` runs the whole `npm test` in `tools/puppet`, output to a
+  file, only the summary printed. Done.
+- B. `tools/puppet/mcp.test.js` spawns `mcp.js` over stdio against a fake
+  bridge: initialize, `tools/list`, a refusal passing through verbatim, a
+  malformed request, a screenshot returned as an image block. Done.
+- C. `docs/ROADMAP.md` no longer says the GitHub repository does not exist and
+  marks publishing done, as far as the repository's own files prove. Done.
+- D. `tools/puppet/junit.test.js` covers escaping and failure counts. Done.
+
+Result: `cd tools/puppet && npm test` passes, 75 tests, 0 failures.
+
+## Task 3 — Core unit tests and a drift check between the two builds
+
+Status: **done** 2026-10-07 (uncommitted at the time of writing). Write area:
+`common/src/test/`, `tools/`.
+
+Result: `ArgsTest` (8), `EventLogTest` (9), `ProtocolToolsTest` (1) and
+`tools/check-twins.js`, run first by `tools/build-all.sh`. `:common:test`
+passes in both builds, 121 tests each. A deliberate `compat` drift made the
+script exit 1; a mixin-list mismatch was not tried. No bug found in `Args` or
+`EventLog`.
+
+Unit tests for `core/Args.java` and `core/EventLog.java`, and a test that
+`Protocol.VERSION` is listed in `PROTOCOLS` in `tools/puppet/lib.js`. Then a
+script that compares the public signatures of each `compat` class with its
+twin in `mc1.20.1/`, and the two `mc_puppet.mixins.json` lists, and fails
+when they differ where they should not. Run by `tools/build-all.sh`.
+
+## Task 4 — A client started with `pretend_production` has no exit of its own
+
+Status: **done 2026-10-07**: owner decision, a hint only. `McPuppet.init` logs
+one WARN saying the bridge is intentionally off and the window must be closed
+by hand; no auto-exit, no window title, no change to the bridge or consent code.
+
+Such a client has no bridge, so nothing can ask it to quit; it must be closed
+by hand (see `McPuppet.java`, around lines 44 to 49, and CLAUDE.md). Whether it
+should end itself after a timeout, or print how to close it, or stay as it is,
+is a design decision for the owner. Any answer touches the consent and bridge
+code, which CLAUDE.md says is read twice, so the change gets a security
+double read before it is merged.
+
+## Task 5 — Scenarios for what only a real game shows
+
+Status: **done** 2026-10-08 for the four dev targets (see the last result below); still unproven: the other jars outside a dev environment, a client from a launcher, `two-clients-one-server`. Written 2026-10-07.
+
+Scenarios for: stopping and releasing held input; `break_block`; repairing a
+hotbar hand. And `tools/prod-check.js` beyond the one case it was seen on
+(NeoForge 1.21.1): the Forge 1.20.1 jar, the two Fabric jars, and a client
+started from a launcher.
+
+Result 2026-10-07 (owner: menu only, no world):
+- Fabric 1.21.1: **partly done**, main menu only. Seen: `events.jsonl` seq 1
+  `process.started`, 2 `client.ready`, 3 `process.exited` (code 0) — monotonic;
+  `puppet events` and `puppet wait --event client.ready --timeout 120` exit 0;
+  `puppet client quit` ended the process. No `client.starting` event exists
+  (the names are those three). `wait-for-the-world.json` failed at step 1 (timed
+  out after 120s waiting for `client.connected`) because no world was joined,
+  as expected from the menu, not a defect.
+- Not run: needs a world — held-input stop/release, `break_block`, hotbar hand
+  repair, `focused-input`, `eyes-and-hands`, `mouse-drag`, `trade-with-a-villager`,
+  `wait-for-the-world` beyond step 1; `two-clients-one-server` needs more than one client.
+- NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1: still open, owner-gated.
+
+Result 2026-10-07, second run (owner asked for a full check; Fabric 1.21.1 with a world):
+- Seen: default events in events.jsonl seq 1 process.started, 2 client.ready, 3 server.ready, 4 client.connected, 5 client.disconnected (monotonic); then after `client leave_world` client.disconnected {reason:left}, after `client quit` process.exited code 0; no orphan java.
+- `wait-for-the-world.json` PASS 2/2; eyes-and-hands PASS; mouse-drag PASS; focused-input PASS 59/59 and trade-with-a-villager PASS 24/24 in a flat world with structures:false (in a default world with structures both failed because of the world: a water block, a librarian instead of the farmer).
+- Held input: `hold forward` stopped by `client stop` (hold ends "input was stopped", position stops), `hold forward+sprint` ended by `client release_keys` ("input was released"). break_block PASS (broke minecraft:dirt, ticks 15; refuses with "looking at ... the crosshair is on the block at ..."). Hotbar hand repair PASS (7 hotbar ops in focused-input incl. slot 99 and a repeated slot).
+- Dedicated server (Fabric 1.21.1, `:fabric:runServer`): server.ready seq 1 only, no client classes loaded, stopped by `puppet server command stop`, clean exit.
+- NOT seen, because not on by default (Events.java:111 lists only server.ready, client.ready, client.connected, client.connect_failed, client.disconnected): player.joined, player.left, server.stopping, server.stopped. Open: rerun with config events.enabled=["*"] to prove them, and check that an event fired during server shutdown still reaches the file.
+- Findings (no bug): `puppet wait --event client.ready` returns 0 at once if the old events.jsonl of a finished run is still there (stale match) — decide whether launch or wait should guard with --since; scenarios focused-input and trade-with-a-villager need a flat structures:false world, say so in their text.
+- Still open and owner-gated: NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1; two-clients-one-server (needs two clients).
+
+Result 2026-10-08 (owner allowed the agent to run games): all PASS, no bug. Task 9 live on Fabric 1.21.1 dedicated server: `wait --event server.ready` right after a new `runServer` returned the new run's seq 1, not the old line. NeoForge 1.21.1, Fabric 1.20.1, Forge 1.20.1 each: events seq 1-6 (process.started, client.ready, server.ready, client.connected, client.disconnected, process.exited code 0), flat world structures=false, wait-for-the-world 2/2, focused-input 59/59, eyes-and-hands 47/47, mouse-drag 39/39, trade-with-a-villager 24/24, leave_world and quit clean, no orphan java. `two-clients-one-server` PASS live 2026-10-08 (Fabric 1.21.1; see task 10). Not run: `prod-check.js` on the other jars, a launcher client.
+
+## Task 6 — Prove player.joined/left and server.stopping/stopped with events.enabled=["*"]
+
+Status: **done** 2026-10-07 (Fabric 1.21.1, `events.enabled=["*"]`, config restored). Dedicated server: server.starting 1, server.ready 2, server.stopping 3, server.stopped 4, all in the file after the process ended. Client with a flat structures:false world: player.joined 5, client.connected 6, player.left 7, server.stopping 8, server.stopped 9 (about 33 s after, during world save), client.disconnected 10 (reason left), process.exited 11 code 0. Shutdown events reach the file. No orphan java. Note: `puppet server command stop` fails, the form is `command=stop`.
+
+## Task 9 — Stale file after a dedicated-server run
+
+Status: **done** 2026-10-07: `wait` without `--since` also treats a file ending in `server.stopped` with no `client.*` event as a finished run (dedicated server); single-player files are unaffected; `--since` and exit codes unchanged; test added. Also `puppet server command stop` now refuses in words and shows `command=stop` (test added). `npm test` 106/106, check-twins 0, all four `:common:test` and jar builds green (a one-off Windows `@TempDir` cleanup failure in `EventsTest` did not repeat in two reruns). Found in task 6: `puppet wait --event server.ready` issued right after a launch returned at once with the previous run's line, because the file is emptied only when the new run starts. Task 7's guard covers only a file ending in `process.exited`; a dedicated server started by `runServer` ends with `server.stopped` and no `process.exited`. Decide: treat a last event `server.stopped` as finished too, or have `wait` read the file's run mtime/pid. Add a test; keep `--since` unchanged.
+
+## Task 7 — Stale events.jsonl match in `puppet wait`
+
+Status: **done** 2026-10-07 (uncommitted at writing). `puppet wait` without `--since` ignores the events of a file whose last event is `process.exited` until a newer run appears (`process.started`, or seq not above the old last seq); `--since` unchanged; exit codes 0/1/2 unchanged. 5 new tests in `events.test.js`; `npm test` 104/104; `check-twins` exit 0. README `puppet wait` paragraph updated.
+
+## Task 8 — Document flat-world requirement in scenarios
+
+Status: **done** 2026-10-07. The `about` of `scenarios/focused-input.json` and `scenarios/trade-with-a-villager.json` now says the flat world has structures disabled.
+
+## Task 10 — `puppet wait` / `puppet events` cannot pick one named client
+
+Status: **done** 2026-10-08 (uncommitted at writing): `--client NAME` on `puppet wait` / `puppet events` reads only `runs/NAME/events.jsonl` (same places as `--dir`); refused with `--dir` and for an unknown name, in words; 3 tests in `events.test.js`. Open design question for the owner: a client quit while connected ends in `process.exited` with no `client.disconnected` (written by the Java side); `wait`/`events` can do nothing about it, only a Java change could. Was: found live (Fabric 1.21.1, `two-clients-one-server` PASS with `launch client --name bot1,bot2`): each client writes its own `fabric/runs/<name>/events.jsonl`, the server `fabric/run/events.jsonl`. Without `--dir`, `wait`/`events` scan every run dir and merge them, so a bare `wait --event client.connected` can be satisfied by the other client. Only workaround: `--dir fabric/runs/bot2` (repeatable, also `MC_PUPPET_DIRS`). `--name` filters event names, not clients. Proposal: `--client bot2` meaning `runs/bot2` (as `client@bot2` already does for ops), a README line, a test in `events.test.js`; the multi-file default stays. Also seen: quitting a client while connected ends with `process.exited` and no `client.disconnected`; decide if that is intended and say so in the README.
+
+## Task 11 — Say in the window title that a pretend_production client has no exit
+
+Status: **done** 2026-10-08 (uncommitted at writing; unverified in a live game). Follows Task 4: a client started with `-Dmc_puppet.pretend_production=true` has no bridge and must be closed by hand, and now says so in its window title. `MinecraftClientMixin` appends " [MC Puppet: pretend_production, no bridge, close by hand]" to `MinecraftClient#getWindowTitle` at RETURN (`require = 0`) only when the property is set; same Yarn name on 1.20.1 and 1.21.1, so no `compat/` twin. No bridge, consent or config change.
+
+## Task 12 — prod-check for Fabric 1.21.1, Fabric 1.20.1 and Forge 1.20.1 jars
+
+Status: **open**. `tools/prod-check.js` is hardcoded to NeoForge (lines 34, 61, 78, 83, 198), so only the NeoForge 1.21.1 jar has been run in a real server outside a development environment (14/14 on 2026-10-08). Make the loader and game version a parameter and run the fourteen checks on the other three jars.

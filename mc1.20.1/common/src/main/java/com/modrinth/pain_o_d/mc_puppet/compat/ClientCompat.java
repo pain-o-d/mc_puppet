@@ -7,6 +7,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ConnectScreen;
+import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.client.network.ServerAddress;
+import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.scoreboard.Scoreboard;
@@ -27,6 +31,11 @@ public final class ClientCompat {
     /** The sidebar's slot. A number here; an enum from 1.20.2. */
     private static final int SIDEBAR = 1;
 
+    /** How far into the current tick this frame is drawn, 0 to 1: what the renderer eases positions by. */
+    public static float tickDelta(MinecraftClient client) {
+        return client.getTickDelta();
+    }
+
     public static void updateCrosshair(MinecraftClient client) {
         client.gameRenderer.updateTargetedEntity(1f);
     }
@@ -38,6 +47,18 @@ public final class ClientCompat {
     public static void createWorld(MinecraftClient client, String name, LevelInfo level, GeneratorOptions generator,
                                    Function<DynamicRegistryManager, DimensionOptionsRegistryHolder> dimensions) {
         client.createIntegratedServerLoader().createAndStart(name, level, generator, dimensions);
+    }
+
+    public static void joinServer(MinecraftClient client, ServerAddress address, String asTyped) {
+        ConnectScreen.connect(new TitleScreen(), client, address, new ServerInfo("MC Puppet", asTyped, false), false);
+    }
+
+    public static boolean isConnecting(net.minecraft.client.gui.screen.Screen screen) {
+        return screen instanceof ConnectScreen;
+    }
+
+    public static String disconnectReason(net.minecraft.client.gui.screen.DisconnectedScreen screen) {
+        return ((com.modrinth.pain_o_d.mc_puppet.mixin.compat.DisconnectedScreenAccessor) screen).mc_puppet$reason().getString();
     }
 
     public static void onSound(MinecraftClient client, Consumer<SoundInstance> heard) {

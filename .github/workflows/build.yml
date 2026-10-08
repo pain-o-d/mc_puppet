@@ -63,6 +63,9 @@ jobs:
           (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
           # Four mods, their four sources, the tools, the sums: anything else is a build that went wrong.
           test "$(ls dist | wc -l)" -eq 10
+          # A sources jar is for reading the bridge one has installed: 0.1.1 and 0.1.2 shipped ones that held
+          # the loader's entry point and nothing else, and nobody had opened one.
+          for sources in dist/*-sources.jar; do unzip -l "$sources" | grep -q "core/Bridge.java" || { echo "$sources has no sources in it"; exit 1; }; done
 
       - uses: actions/upload-artifact@v4
         with:

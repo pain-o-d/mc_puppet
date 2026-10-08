@@ -1,0 +1,657 @@
+package com.modrinth.pain_o_d.mc_puppet.core;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.registry.Registries;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.world.World;
+
+/**
+ * Watches entities every tick for a while and says how they moved: what a screenshot shows one frame of and a
+ * test cannot assert. Entities that appear or vanish, and those that blink (live a few ticks); the largest step
+ * a tick and the jumps (a step no walk makes - a teleport); the sharpest turn; those that move without their
+ * legs moving (slide); those standing on nothing or inside a block; pairs closer than their width (through one
+ * another). The worst of each, with where and when, so a failed test says what to look at.
+ *
+ * <p>Nothing is asked of the world but its entity list and the blocks at their feet: a box query would itself
+ * be something a mod can answer (one that makes bodies for what is looked at would make them for the watch).
+ */
+public final class Watch {
+
+    /** The longest watch: a minute. */
+    public static final int MAX_TICKS = 1200;
+    private static final int BLINK_TICKS = 5;
+    private static final int WORST = 8;
+
+    private static final class Track {
+        double x;
+        double y;
+        double z;
+        float yaw;
+        /** Last tick's step, for the jitter: back and forth is a step against the one before. */
+        double stepX;
+        double stepZ;
+        /** Last tick's turn, degrees signed, for the wobble. */
+        double turn;
+        /** Every tick's x, z and yaw when a trace is asked for. */
+        List<double[]> trace;
+        /** The entity itself, for the frames between ticks. */
+        Entity entity;
+        /** The last sixty steps' lengths while moving: the entity's own walk, for a burst to be judged against. */
+        final double[] pace = new double[60];
+        int paces;
+
+        void rememberPace(double step) {
+            this.pace[this.paces % this.pace.length] = step;
+            this.paces++;
+            this.paceSum += step;
+            this.paceSquares += step * step;
+        }
+
+        /** The whole walk's steps, for this entity's own unevenness. */
+        double paceSum;
+        double paceSquares;
+        /** Ticks moving in a row, and ticks still in a row: a stop is still between two walks. */
+        int movingRun;
+        int stillRun;
+        double lastStep;
+
+        double paceCv() {
+            if (this.paces < 20) {
+                return -1;
+            }
+            double mean = this.paceSum / this.paces;
+            double var = Math.max(0, this.paceSquares / this.paces - mean * mean);
+            return mean == 0 ? 0 : Math.sqrt(var) / mean;
+        }
+        /** Where the last frame drew it, and how it moved to there from the frame before. */
+        double drawnX;
+        double drawnZ;
+        double drawnYaw;
+        double frameX;
+        double frameZ;
+        double frameTurn;
+        int framesSeen;
+        int firstTick;
+        int lastTick;
+        boolean first = true;
+        /** The last {@link #HISTORY} ticks: x, y, z, yaw, legs' speed. */
+        final double[][] history = new double[HISTORY][];
+        int written;
+
+        void remember(Entity entity) {
+            double legs = entity instanceof LivingEntity living ? living.limbAnimator.getSpeed() : 0;
+            this.history[this.written % HISTORY] = new double[] {entity.getX(), entity.getY(), entity.getZ(), facing(entity), legs};
+            this.written++;
+        }
+
+        JsonArray recent() {
+            JsonArray out = new JsonArray();
+            for (int k = Math.max(0, this.written - HISTORY); k < this.written; k++) {
+                double[] h = this.history[k % HISTORY];
+                out.add(round(h[0]) + " " + round(h[1]) + " " + round(h[2]) + " yaw " + round(h[3]) + " legs " + round(h[4]));
+            }
+            return out;
+        }
+    }
+
+    private static final int HISTORY = 10;
+
+    /**
+     * The facing a player sees: a living entity's body, which its model is drawn by and the client eases,
+     * not its yaw, which a server's rotation packets move in steps of three ticks.
+     */
+    private static float facing(Entity entity) {
+        return entity instanceof LivingEntity living ? living.bodyYaw : entity.getYaw();
+    }
+
+    private record Event(String kind, int entity, int tick, double value, double x, double y, double z, JsonArray history) {
+    }
+
+    private final Supplier<Iterable<Entity>> source;
+    private final int ticks;
+    private final double jump;
+    private final double turn;
+    private final boolean trace;
+    private final Map<Integer, Track> tracks = new HashMap<>();
+    private final List<Event> worst = new ArrayList<>();
+    private final List<Double> steps = new ArrayList<>();
+    private int tick;
+    private int entitiesMin = Integer.MAX_VALUE;
+    private int entitiesMax;
+    private int appeared;
+    private int disappeared;
+    private int blinks;
+    private int jumps;
+    private int turns;
+    private double stepMax;
+    private double turnMax;
+    private long moving;
+    private long sliding;
+    private long floating;
+    private long buried;
+    private long burning;
+    private long overlaps;
+    private int overlapsMax;
+    private long reversals;
+    private long wobbles;
+    private long frames;
+    private long frameReversals;
+    private long frameWobbles;
+    private long backwards;
+    private long sideways;
+    private long headAskew;
+    private long bursts;
+    private final List<Double> accels = new ArrayList<>();
+    private long accelOver;
+    private long stops;
+    private final List<Double> neighbours = new ArrayList<>();
+    private long paceTicks;
+    private double paceSum;
+    private double paceSquares;
+    private boolean living;
+
+    /**
+     * @param source the entities to watch this tick, already filtered by the caller
+     * @param args {@code ticks} (default 100), {@code jump} (blocks a tick counted a jump, default 1.0),
+     *             {@code turn} (degrees a tick counted a sharp turn, default 45), {@code trace} (true: every
+     *             entity's x, z and yaw every tick in the answer, for a script to read)
+     */
+    public Watch(Supplier<Iterable<Entity>> source, JsonObject args) throws Ops.Refused {
+        this.source = source;
+        this.ticks = Math.max(1, Math.min(MAX_TICKS, Args.integer(args, "ticks", 100)));
+        this.jump = args.has("jump") ? Args.decimal(args, "jump") : 1.0;
+        this.turn = args.has("turn") ? Args.decimal(args, "turn") : 45;
+        this.trace = args.has("trace") && args.get("trace").getAsBoolean();
+    }
+
+    public int ticks() {
+        return this.ticks;
+    }
+
+    /** Once a tick, from the waiter: null until the watch is over, then what it saw. */
+    public JsonElement tick() {
+        List<Entity> now = new ArrayList<>();
+        for (Entity entity : this.source.get()) {
+            if (entity.isAlive()) {
+                now.add(entity);
+            }
+        }
+        this.entitiesMin = Math.min(this.entitiesMin, now.size());
+        this.entitiesMax = Math.max(this.entitiesMax, now.size());
+        Map<Integer, Boolean> seen = new HashMap<>();
+        for (Entity entity : now) {
+            int id = entity.getId();
+            seen.put(id, true);
+            Track track = this.tracks.get(id);
+            if (track == null) {
+                track = new Track();
+                track.firstTick = this.tick;
+                this.tracks.put(id, track);
+                if (this.tick > 0) {
+                    this.appeared++;
+                }
+            }
+            track.entity = entity;
+            // An entity out of the radius last tick and back in it now: its last place is stale, and the step from
+            // it would be a jump that never happened. Judged afresh, as an entity first seen.
+            if (!track.first && track.lastTick != this.tick - 1) {
+                track.first = true;
+                track.movingRun = 0;
+                track.stillRun = 0;
+                track.lastStep = 0;
+            }
+            track.remember(entity);   // this tick's too, so an event's history ends where it happened
+            if (this.trace) {
+                if (track.trace == null) {
+                    track.trace = new ArrayList<>();
+                }
+                track.trace.add(new double[] {this.tick, entity.getX(), entity.getZ(), facing(entity)});
+            }
+            if (!track.first) {
+                double dx = entity.getX() - track.x;
+                double dz = entity.getZ() - track.z;
+                double step = Math.sqrt(dx * dx + dz * dz);
+                jitter(track, entity, dx, dz, step);
+                this.steps.add(step);
+                this.stepMax = Math.max(this.stepMax, step);
+                if (step > this.jump) {
+                    this.jumps++;
+                    note("jump", entity, step);
+                }
+                double turned = Math.abs(((facing(entity) - track.yaw) % 360 + 540) % 360 - 180);
+                this.turnMax = Math.max(this.turnMax, turned);
+                if (turned > this.turn) {
+                    this.turns++;
+                    note("turn", entity, turned);
+                }
+                if (step > 0.03) {
+                    this.moving++;
+                    if (entity instanceof LivingEntity living) {
+                        this.living = true;
+                        if (living.limbAnimator.getSpeed() < 0.05f) {
+                            this.sliding++;
+                            note("slide", entity, step);
+                        }
+                    }
+                }
+            }
+            standing(entity);
+            if (entity.isOnFire()) {
+                this.burning++;   // drawn afire: a mod that sets or clears fire on what it draws is held to it
+            }
+            track.x = entity.getX();
+            track.y = entity.getY();
+            track.z = entity.getZ();
+            track.turn = track.first ? 0 : (((facing(entity) - track.yaw) % 360 + 540) % 360 - 180);
+            track.yaw = facing(entity);
+            track.lastTick = this.tick;
+            track.first = false;
+        }
+        for (Map.Entry<Integer, Track> entry : this.tracks.entrySet()) {
+            Track track = entry.getValue();
+            if (track.lastTick == this.tick - 1 && !seen.containsKey(entry.getKey())) {
+                this.disappeared++;
+                if (track.firstTick > 0 && track.lastTick - track.firstTick < BLINK_TICKS) {
+                    this.blinks++;
+                    this.worstAdd(new Event("blink", entry.getKey(), this.tick, track.lastTick - track.firstTick + 1,
+                            track.x, track.y, track.z, track.recent()));
+                }
+            }
+        }
+        overlap(now);
+        this.tick++;
+        return this.tick >= this.ticks ? summary() : null;
+    }
+
+    /**
+     * A frame, between the ticks: where the renderer draws each watched entity now - its position eased from
+     * the last tick's to this one's by {@code tickDelta}, as the renderer eases it - against where the last frame
+     * drew it. A frame's move against the frame before's is a flutter the ticks never show: an entity whose
+     * eased path doubles back, because its last position was reset under it, or set twice a tick. Called by the
+     * client on each frame while a watch runs; a server watch has no frames.
+     */
+    public void frame(float tickDelta) {
+        this.frames++;
+        for (Track track : this.tracks.values()) {
+            Entity entity = track.entity;
+            if (entity == null || !entity.isAlive() || track.lastTick != this.tick - 1) {
+                continue;
+            }
+            double x = entity.prevX + (entity.getX() - entity.prevX) * tickDelta;
+            double z = entity.prevZ + (entity.getZ() - entity.prevZ) * tickDelta;
+            double yaw = entity instanceof LivingEntity living
+                    ? living.prevBodyYaw + ((((living.bodyYaw - living.prevBodyYaw) % 360) + 540) % 360 - 180) * tickDelta
+                    : entity.prevYaw + ((((entity.getYaw() - entity.prevYaw) % 360) + 540) % 360 - 180) * tickDelta;
+            if (track.framesSeen > 0) {
+                double dx = x - track.drawnX;
+                double dz = z - track.drawnZ;
+                double turned = ((yaw - track.drawnYaw) % 360 + 540) % 360 - 180;
+                if (track.framesSeen > 1) {
+                    if (Math.hypot(dx, dz) > FRAME_STEP && Math.hypot(track.frameX, track.frameZ) > FRAME_STEP
+                            && dx * track.frameX + dz * track.frameZ < 0) {
+                        this.frameReversals++;
+                        note("flutter", entity, Math.hypot(dx, dz));
+                    }
+                    if (Math.abs(turned) > FRAME_WOBBLE && Math.abs(track.frameTurn) > FRAME_WOBBLE && turned * track.frameTurn < 0) {
+                        this.frameWobbles++;
+                        note("frame_wobble", entity, Math.abs(turned));
+                    }
+                }
+                track.frameX = dx;
+                track.frameZ = dz;
+                track.frameTurn = turned;
+            }
+            track.drawnX = x;
+            track.drawnZ = z;
+            track.drawnYaw = yaw;
+            track.framesSeen++;
+        }
+    }
+
+    /** A frame's move, or turn, small enough to be the renderer's own rounding and not a flutter. */
+    private static final double FRAME_STEP = 0.004;
+    private static final double FRAME_WOBBLE = 0.5;
+
+    /** A step against the one before it, or a turn against the one before it: a twitch no walk makes. */
+    private static final double JITTER_STEP = 0.02;
+    private static final double WOBBLE = 2.0;
+
+    /**
+     * The twitching a jump threshold misses: a step back against the last one (both over {@link #JITTER_STEP}) is a
+     * reversal - a body shoved and put back, a picture's arithmetic at odds with itself; a turn against the last
+     * one, both over {@link #WOBBLE} degrees, is a wobble; and the pace - each step's length while moving - is
+     * summed for its variance, so an even walk and a stop-and-go read differently though both pass the jumps.
+     */
+    private void jitter(Track track, Entity entity, double dx, double dz, double step) {
+        if (step > JITTER_STEP && Math.hypot(track.stepX, track.stepZ) > JITTER_STEP && dx * track.stepX + dz * track.stepZ < 0) {
+            this.reversals++;
+            note("reversal", entity, step);
+        }
+        track.stepX = dx;
+        track.stepZ = dz;
+        double turned = ((facing(entity) - track.yaw) % 360 + 540) % 360 - 180;
+        if (Math.abs(turned) > WOBBLE && Math.abs(track.turn) > WOBBLE && turned * track.turn < 0) {
+            this.wobbles++;
+            note("wobble", entity, Math.abs(turned));
+        }
+        if (step > 0.03) {
+            this.paceTicks++;
+            this.paceSum += step;
+            this.paceSquares += step * step;
+            // The body against the motion: a facing of yaw degrees looks along (-sin, cos). Walking is within 60
+            // degrees of it; beyond 120 is backwards; between is sideways - a crab, a slide, a turn drawn wrong.
+            double yaw = Math.toRadians(facing(entity));
+            double cos = (dx * -Math.sin(yaw) + dz * Math.cos(yaw)) / step;
+            if (cos < -0.5) {
+                this.backwards++;
+                note("backwards", entity, step);
+            } else if (cos < 0.5) {
+                this.sideways++;
+                note("sideways", entity, step);
+            }
+            // A step twice the walk's own, the walk being the entity's median pace so far: a burst no walk makes
+            // - a clock skipped, a correction. Judged once a walk is known (twenty steps).
+            double median = medianPace(track);
+            if (median > 0 && track.paces >= 20 && step > 2 * median) {
+                this.bursts++;
+                note("burst", entity, step / median);
+            }
+            // The change of speed from one moving tick to the next: a walk's own is small; a quarter of the
+            // entity's own pace in a tick is a change of speed no walk makes, unless it is starting or stopping.
+            if (track.lastStep > 0.03 && track.movingRun >= 3) {
+                double accel = Math.abs(step - track.lastStep);
+                this.accels.add(accel);
+                if (median > 0 && track.paces >= 20 && accel > 0.25 * median) {
+                    this.accelOver++;
+                    note("accel", entity, accel / median);
+                }
+            }
+            track.rememberPace(step);
+            if (track.stillRun > 0 && track.stillRun <= 40 && track.movingRun == 0 && track.paces > 5) {
+                this.stops++;   // walked, stood a moment, walks again
+                note("stop", entity, track.stillRun);
+            }
+            track.movingRun++;
+            track.stillRun = 0;
+        } else {
+            if (track.movingRun > 0) {
+                track.movingRun = 0;
+            }
+            track.stillRun++;
+        }
+        track.lastStep = step;
+        if (entity instanceof LivingEntity living) {
+            double askew = Math.abs(((living.headYaw - living.bodyYaw) % 360 + 540) % 360 - 180);
+            if (askew > 75) {
+                this.headAskew++;   // the head turned further from the body than a neck goes
+                note("head_askew", entity, askew);
+            }
+        }
+    }
+
+    private static double medianPace(Track track) {
+        int n = Math.min(track.paces, track.pace.length);
+        if (n == 0) {
+            return 0;
+        }
+        double[] sorted = java.util.Arrays.copyOf(track.pace, n);
+        java.util.Arrays.sort(sorted);
+        return sorted[n / 2];
+    }
+
+    /** On nothing, or inside a block: the block at the feet and the one under them. */
+    private void standing(Entity entity) {
+        World world = entity.getWorld();
+        if (entity.hasVehicle()) {
+            return;
+        }
+        BlockPos feet = entity.getBlockPos();
+        var at = world.getBlockState(feet).getCollisionShape(world, feet);
+        if (!at.isEmpty() && feet.getY() + at.getMax(Direction.Axis.Y) > entity.getY() + 0.1
+                && feet.getY() + at.getMin(Direction.Axis.Y) < entity.getY() + 0.5) {
+            this.buried++;
+            note("buried", entity, 0);
+            return;
+        }
+        // On nothing: an entity kept up by no gravity (a mod's placed body, a picture's) over air. A body with
+        // gravity in the air is falling or jumping, and a flyer flies: neither is a defect.
+        if (at.isEmpty() && entity.hasNoGravity() && !entity.isOnGround() && !entity.isTouchingWater()
+                && !(entity instanceof net.minecraft.entity.Flutterer)
+                && world.getBlockState(feet.down()).getCollisionShape(world, feet.down()).isEmpty()) {
+            this.floating++;
+            note("floating", entity, 0);
+        }
+    }
+
+    /** Pairs closer than the narrower of the two, level with each other: one through the other. */
+    private void overlap(List<Entity> now) {
+        Map<Long, List<Entity>> cells = new HashMap<>();
+        for (Entity entity : now) {
+            long key = cell(Math.floor(entity.getX()), Math.floor(entity.getZ()));
+            cells.computeIfAbsent(key, k -> new ArrayList<>()).add(entity);
+        }
+        int pairs = 0;
+        for (Entity a : now) {
+            long cx = (long) Math.floor(a.getX());
+            long cz = (long) Math.floor(a.getZ());
+            for (long dx = -1; dx <= 1; dx++) {
+                for (long dz = -1; dz <= 1; dz++) {
+                    List<Entity> cell = cells.get(cell(cx + dx, cz + dz));
+                    if (cell == null) {
+                        continue;
+                    }
+                    for (Entity b : cell) {
+                        if (b.getId() <= a.getId() || Math.abs(a.getY() - b.getY()) > 1) {
+                            continue;
+                        }
+                        double width = Math.min(a.getWidth(), b.getWidth());
+                        double ex = a.getX() - b.getX();
+                        double ez = a.getZ() - b.getZ();
+                        if (ex * ex + ez * ez < width * width) {
+                            pairs++;
+                            if (this.worst.size() < WORST) {
+                                note("overlap", a, Math.sqrt(ex * ex + ez * ez));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        this.overlaps += pairs;
+        this.overlapsMax = Math.max(this.overlapsMax, pairs);
+        // Each moving entity's distance to its nearest moving neighbour within two blocks: a parade's are all
+        // alike, a crowd's are not (neighbour_cv). Cells of a block; the eight around.
+        for (Entity a : now) {
+            Track track = this.tracks.get(a.getId());
+            if (track == null || track.movingRun < 1) {
+                continue;
+            }
+            double nearest = Double.MAX_VALUE;
+            long cx = (long) Math.floor(a.getX());
+            long cz = (long) Math.floor(a.getZ());
+            for (long dx = -2; dx <= 2; dx++) {
+                for (long dz = -2; dz <= 2; dz++) {
+                    List<Entity> cell = cells.get(cell(cx + dx, cz + dz));
+                    if (cell == null) {
+                        continue;
+                    }
+                    for (Entity b : cell) {
+                        Track other = this.tracks.get(b.getId());
+                        if (b == a || other == null || other.movingRun < 1) {
+                            continue;
+                        }
+                        double ex = a.getX() - b.getX();
+                        double ez = a.getZ() - b.getZ();
+                        nearest = Math.min(nearest, ex * ex + ez * ez);
+                    }
+                }
+            }
+            if (nearest < 4) {
+                this.neighbours.add(Math.sqrt(nearest));
+            }
+        }
+    }
+
+    private static long cell(double x, double z) {
+        return ((long) x) << 32 ^ (((long) z) & 0xFFFFFFFFL);
+    }
+
+    private void note(String kind, Entity entity, double value) {
+        Track track = this.tracks.get(entity.getId());
+        worstAdd(new Event(kind, entity.getId(), this.tick, value, entity.getX(), entity.getY(), entity.getZ(),
+                track == null ? new JsonArray() : track.recent()));
+    }
+
+    /** The worst eight, one of a kind first, then by value. */
+    private void worstAdd(Event event) {
+        for (int i = 0; i < this.worst.size(); i++) {
+            Event other = this.worst.get(i);
+            if (other.kind().equals(event.kind())) {
+                if (event.value() > other.value()) {
+                    this.worst.set(i, event);
+                }
+                return;
+            }
+        }
+        if (this.worst.size() < WORST) {
+            this.worst.add(event);
+        }
+    }
+
+    private JsonObject summary() {
+        JsonObject out = new JsonObject();
+        out.addProperty("ticks", this.tick);
+        out.addProperty("entities_min", this.entitiesMin == Integer.MAX_VALUE ? 0 : this.entitiesMin);
+        out.addProperty("entities_max", this.entitiesMax);
+        out.addProperty("appeared", this.appeared);
+        out.addProperty("disappeared", this.disappeared);
+        out.addProperty("blinks", this.blinks);
+        out.addProperty("step_max", round(this.stepMax));
+        out.addProperty("step_p95", round(quantile(this.steps, 0.95)));
+        out.addProperty("jumps", this.jumps);
+        out.addProperty("turn_max", round(this.turnMax));
+        out.addProperty("turns", this.turns);
+        out.addProperty("moving", this.moving);
+        if (this.living) {
+            out.addProperty("sliding", this.sliding);
+            out.addProperty("sliding_share", this.moving == 0 ? 0 : round((double) this.sliding / this.moving));
+        }
+        out.addProperty("floating", this.floating);
+        out.addProperty("buried", this.buried);
+        out.addProperty("burning", this.burning);
+        out.addProperty("overlaps_mean", round((double) this.overlaps / Math.max(1, this.tick)));
+        out.addProperty("overlaps_max", this.overlapsMax);
+        out.addProperty("reversals", this.reversals);
+        out.addProperty("wobbles", this.wobbles);
+        double paceMean = this.paceTicks == 0 ? 0 : this.paceSum / this.paceTicks;
+        double paceVar = this.paceTicks == 0 ? 0 : Math.max(0, this.paceSquares / this.paceTicks - paceMean * paceMean);
+        out.addProperty("pace_mean", round(paceMean));
+        // the pace's unevenness: its standard deviation over its mean - 0 an even walk, 0.5 a stop-and-go
+        out.addProperty("pace_cv", round(paceMean == 0 ? 0 : Math.sqrt(paceVar) / paceMean));
+        out.addProperty("backwards", this.backwards);
+        out.addProperty("sideways", this.sideways);
+        out.addProperty("backwards_share", this.moving == 0 ? 0 : round((double) this.backwards / this.moving));
+        out.addProperty("sideways_share", this.moving == 0 ? 0 : round((double) this.sideways / this.moving));
+        out.addProperty("accel_p95", round(quantile(this.accels, 0.95)));
+        out.addProperty("accel_over", this.accelOver);
+        out.addProperty("stops", this.stops);
+        List<Double> cvs = new ArrayList<>();
+        for (Track track : this.tracks.values()) {
+            double cv = track.paceCv();
+            if (cv >= 0) {
+                cvs.add(cv);
+            }
+        }
+        // each entity's own unevenness of pace: the crowd may be uneven while every member is steady
+        out.addProperty("pace_cv_median", round(quantile(cvs, 0.5)));
+        out.addProperty("pace_cv_p95", round(quantile(cvs, 0.95)));
+        if (!this.neighbours.isEmpty()) {
+            double sum = 0;
+            double squares = 0;
+            for (double d : this.neighbours) {
+                sum += d;
+                squares += d * d;
+            }
+            double mean = sum / this.neighbours.size();
+            double var = Math.max(0, squares / this.neighbours.size() - mean * mean);
+            out.addProperty("neighbour_mean", round(mean));
+            out.addProperty("neighbour_cv", round(mean == 0 ? 0 : Math.sqrt(var) / mean));
+        }
+        out.addProperty("head_askew", this.headAskew);
+        out.addProperty("bursts", this.bursts);
+        if (this.frames > 0) {
+            out.addProperty("frames_sampled", this.frames);
+            out.addProperty("frame_reversals", this.frameReversals);
+            out.addProperty("frame_wobbles", this.frameWobbles);
+        }
+        JsonArray list = new JsonArray();
+        for (Event event : this.worst) {
+            JsonObject one = new JsonObject();
+            one.addProperty("kind", event.kind());
+            one.addProperty("entity", event.entity());
+            one.addProperty("tick", event.tick());
+            one.addProperty("value", round(event.value()));
+            one.addProperty("at", round(event.x()) + " " + round(event.y()) + " " + round(event.z()));
+            one.add("history", event.history());
+            list.add(one);
+        }
+        out.add("worst", list);
+        if (this.trace) {
+            JsonObject traces = new JsonObject();
+            for (Map.Entry<Integer, Track> entry : this.tracks.entrySet()) {
+                if (entry.getValue().trace == null) {
+                    continue;
+                }
+                JsonArray rows = new JsonArray();
+                for (double[] row : entry.getValue().trace) {
+                    rows.add((int) row[0] + " " + round(row[1]) + " " + round(row[2]) + " " + round(row[3]));
+                }
+                traces.add(String.valueOf(entry.getKey()), rows);
+            }
+            out.add("trace", traces);
+        }
+        return out;
+    }
+
+    private static double quantile(List<Double> values, double q) {
+        if (values.isEmpty()) {
+            return 0;
+        }
+        List<Double> sorted = new ArrayList<>(values);
+        sorted.sort(null);
+        return sorted.get(Math.min(sorted.size() - 1, (int) Math.floor(q * sorted.size())));
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 1000) / 1000.0;
+    }
+
+    /**
+     * Whether {@code entity} passes the watch's {@code ai} filter: absent, everything; false, only mobs whose
+     * brain is off (a mod's placed bodies and pictures); true, only mobs that think for themselves.
+     */
+    public static boolean ofAi(Entity entity, JsonObject args) {
+        if (!args.has("ai")) {
+            return true;
+        }
+        boolean wanted = args.get("ai").getAsBoolean();
+        return entity instanceof net.minecraft.entity.mob.MobEntity mob && mob.isAiDisabled() != wanted;
+    }
+
+    /** Whether {@code entity} is of the type an op was asked about, or any type when none was. */
+    public static boolean ofType(Entity entity, String type) {
+        return type == null || Registries.ENTITY_TYPE.getId(entity.getType()).toString().equals(type);
+    }
+}

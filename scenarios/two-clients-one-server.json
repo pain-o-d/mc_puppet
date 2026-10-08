@@ -1,0 +1,33 @@
+{
+  "name": "two clients on one server see each other, and the server sees both",
+  "note": "Needs a server and two clients called bot1 and bot2: puppet launch server, then puppet launch client --name bot1,bot2 --server localhost:25565. The server may be another machine's, its port brought here by ssh -L; its own bridge is then out of reach, which is why the steps that ask it are optional.",
+  "setup": [
+    { "side": "client@bot1", "op": "info", "save": "one",
+      "expect": [ { "path": "in_world", "equals": true }, { "path": "singleplayer", "equals": false },
+                  { "path": "elsewhere", "equals": false }, { "path": "username", "equals": "bot1" } ] },
+    { "side": "client@bot2", "op": "info",
+      "expect": [ { "path": "in_world", "equals": true }, { "path": "elsewhere", "equals": false },
+                  { "path": "username", "equals": "bot2" } ] },
+    { "side": "server", "op": "command", "args": { "command": "tp bot2 bot1" }, "optional": true,
+      "note": "with no server bridge in reach, the two are near each other anyway: both are at the spawn" }
+  ],
+  "steps": [
+    { "side": "client@bot1", "op": "entities", "args": { "type": "minecraft:player", "radius": 32 }, "eventually": true,
+      "expect": [ { "path": "[name=bot2]", "exists": true } ] },
+    { "side": "client@bot2", "op": "entities", "args": { "type": "minecraft:player", "radius": 32 }, "eventually": true,
+      "expect": [ { "path": "[name=bot1]", "exists": true } ] },
+
+    { "side": "client@bot2", "op": "chat", "save": "before" },
+    { "side": "client@bot1", "op": "say", "args": { "message": "hello from the first" } },
+    { "side": "client@bot2", "op": "wait", "args": { "for": "chat", "value": "hello from the first",
+                                                     "since": "${before.sequence}", "timeout_ms": 10000 } },
+
+    { "side": "server", "op": "players", "optional": true,
+      "expect": [ { "path": "#", "gte": 2 } ] },
+
+    { "side": "client@bot1", "op": "join_server", "args": { "address": "play.example.org" },
+      "expect_error": "on this machine" },
+    { "side": "client@bot1", "op": "join_server", "args": { "address": "localhost:25565" },
+      "expect_error": "leave_world first" }
+  ]
+}

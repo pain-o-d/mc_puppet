@@ -471,3 +471,54 @@ test("a value may depend on the game's version, since the game's commands do", a
   await run(puppet, { steps: [{ side: "server", op: "command", args: give }] });
   assert.deepEqual(puppet.asked.find((each) => each.op === "command").args, { command: "give @s sword{Enchantments:[]}" });
 });
+
+test("a named client has a game directory and a player's name of its own, and is found by that name", () => {
+  const fsReal = require("fs");
+  const os = require("os");
+  const pathOf = require("path");
+  const { plan, prepare } = require("./launch");
+  const { discover } = require("./lib");
+  const project = fsReal.mkdtempSync(pathOf.join(os.tmpdir(), "puppet-project-"));
+  try {
+    fsReal.mkdirSync(pathOf.join(project, "fabric", "run", "mods"), { recursive: true });
+    fsReal.mkdirSync(pathOf.join(project, "fabric", "run", "saves", "a_world"), { recursive: true });
+    fsReal.writeFileSync(pathOf.join(project, "fabric", "run", "mods", "some.jar"), "jar");
+
+    const unnamed = plan("client", { project, loader: "fabric" });
+    assert.equal(unnamed.gameDir, pathOf.join(project, "fabric", "run"));
+    assert.equal(unnamed.runDir, null, "a client with no name is the project's own, where it always was");
+    assert.equal(prepare(unnamed), false);
+
+    const bot = plan("client", { project, loader: "fabric", name: "bot2" });
+    assert.equal(bot.task, ":fabric:runClient");
+    assert.equal(bot.gameDir, pathOf.join(project, "fabric", "runs", "bot2"));
+    assert.equal(bot.username, "bot2", "one game directory, one player");
+    assert.notEqual(bot.log, unnamed.log, "and one log");
+    assert.equal(plan("client", { project, loader: "fabric", name: "bot2", username: "Steve" }).username, "Steve");
+    assert.throws(() => plan("client", { project, loader: "fabric", name: "../run" }), /cannot name a game/);
+    assert.throws(() => plan("client", { project, loader: "fabric", name: "a-b" }), /--username/);
+    assert.throws(() => plan("client", { project, loader: "fabric", name: "bot2", username: "two words" }), /player's name/);
+    assert.throws(() => plan("server", { project, loader: "fabric", name: "bot2" }), /one dev server/);
+
+    assert.equal(prepare(bot), true);
+    assert.ok(fsReal.existsSync(pathOf.join(bot.gameDir, "mods", "some.jar")), "the same game: its mods");
+    assert.ok(!fsReal.existsSync(pathOf.join(bot.gameDir, "saves")), "and nothing the other played");
+    assert.match(fsReal.readFileSync(pathOf.join(bot.gameDir, "options.txt"), "utf8"), /onboardAccessibility:false/);
+    fsReal.writeFileSync(pathOf.join(bot.gameDir, "options.txt"), "mine");
+    assert.equal(prepare(bot), false);
+    assert.equal(fsReal.readFileSync(pathOf.join(bot.gameDir, "options.txt"), "utf8"), "mine", "made once, then left alone");
+
+    const endpoint = (dir) => {
+      fsReal.mkdirSync(pathOf.join(dir, "mc_puppet"), { recursive: true });
+      fsReal.writeFileSync(pathOf.join(dir, "mc_puppet", "endpoint-client.json"),
+        JSON.stringify({ side: "client", port: 1, token: "t", pid: process.pid, protocol: 1 }));
+    };
+    endpoint(bot.gameDir);
+    endpoint(unnamed.gameDir);
+    const found = discover([project]);
+    assert.deepEqual(found.map((each) => each.game).sort(), ["bot2", undefined].sort());
+    assert.equal(found.find((each) => each.game === "bot2").dir, bot.gameDir);
+  } finally {
+    fsReal.rmSync(project, { recursive: true, force: true });
+  }
+});

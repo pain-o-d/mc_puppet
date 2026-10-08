@@ -63,6 +63,28 @@ function setAllowed(gameDir, allow, home) {
 /** Where a game directory usually is, relative to a mod project's root. */
 const USUAL_DIRS = [".", "run", "fabric/run", "neoforge/run", "forge/run", "common/run"];
 
+/**
+ * Where "launch --name" keeps the games it makes: runs/<name> beside the loader's own run/. The
+ * folder's name is the game's, so a scenario says "client@bot2" with nothing more to configure.
+ */
+const RUNS_UNDER = [".", "fabric", "neoforge", "forge"];
+
+/** Every place under a root where a game may be, with the name it goes by. */
+function placesUnder(root, game) {
+  const places = USUAL_DIRS.map((usual) => ({ dir: path.resolve(root, usual), game }));
+  for (const under of RUNS_UNDER) {
+    const runs = path.resolve(root, under, "runs");
+    let names;
+    try {
+      names = fs.readdirSync(runs);
+    } catch (absent) {
+      continue;
+    }
+    for (const name of names) places.push({ dir: path.join(runs, name), game: name });
+  }
+  return places;
+}
+
 function pidAlive(pid) {
   if (!pid) return true;
   try {
@@ -82,7 +104,8 @@ function pidAlive(pid) {
  *   and then to the current directory
  *   A directory may be given a name, "second=E:/games/two": a scenario then
  *   says "client@second". One game directory per game: two games in one
- *   would write the same endpoint file, and the same log.
+ *   would write the same endpoint file, and the same log. A game under
+ *   runs/<name> is called by its folder's name.
  * @returns {{side: string, host: string, port: number, token: string, pid: number, dir: string, game?: string}[]}
  */
 function discover(dirs) {
@@ -91,8 +114,7 @@ function discover(dirs) {
   const found = [];
   const seen = new Set();
   for (const { game, root } of roots) {
-    for (const usual of USUAL_DIRS) {
-      const dir = path.resolve(root, usual);
+    for (const { dir, game: called } of placesUnder(root, game)) {
       const folder = path.join(dir, "mc_puppet");
       let names;
       try {
@@ -108,7 +130,7 @@ function discover(dirs) {
         try {
           const endpoint = JSON.parse(fs.readFileSync(file, "utf8"));
           // A game that was killed leaves its file behind. The pid says so.
-          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(game ? { game } : {}) });
+          if (pidAlive(endpoint.pid)) found.push({ ...endpoint, dir, ...(called ? { game: called } : {}) });
         } catch (unreadable) {
           // Half-written as the game starts; the next look finds it whole.
         }
@@ -134,32 +156,55 @@ function parseSide(side) {
 /** One connection to one side of one game. Requests are numbered, so they may overlap. */
 class Connection {
   constructor(endpoint) {
-    this.endpoint = endpoint;
+    this.endpoint = { ...endpoint };
     this.socket = null;
+    this.connecting = null;
+    this.attempt = null;
     this.nextId = 1;
     this.waiting = new Map();
     this.buffer = "";
   }
 
   connect() {
-    if (this.socket) return Promise.resolve(this);
-    return new Promise((resolve, reject) => {
-      const socket = net.createConnection({ host: "127.0.0.1", port: this.endpoint.port }, () => {
-        this.socket = socket;
+    if (this.attempt && this.attempt.socket && this.attempt.socket.destroyed) this.close();
+    if (this.connecting) return this.connecting;
+    if (this.attempt && this.attempt.connected && this.socket && !this.socket.destroyed) {
+      return Promise.resolve(this);
+    }
+    let resolve, reject;
+    const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const attempt = { socket: null, connected: false, reject };
+    this.attempt = attempt;
+    this.connecting = promise;
+    this.buffer = "";
+    const fail = (failure) => {
+      if (this.attempt !== attempt) return;
+      this.attempt = null;
+      this.socket = null;
+      this.connecting = null;
+      this.buffer = "";
+      reject(failure);
+      this.failAll(failure);
+      if (attempt.socket) attempt.socket.destroy();
+    };
+    try {
+      const socket = net.createConnection({ host: "127.0.0.1", port: this.endpoint.port });
+      attempt.socket = this.socket = socket;
+      socket.once("connect", () => {
+        if (this.attempt !== attempt) return;
+        attempt.connected = true;
+        this.connecting = null;
         resolve(this);
       });
       socket.setNoDelay(true);
       socket.setEncoding("utf8");
-      socket.on("data", (chunk) => this.onData(chunk));
-      socket.on("error", (failure) => {
-        reject(failure);
-        this.failAll(failure);
-      });
-      socket.on("close", () => {
-        this.socket = null;
-        this.failAll(new Error("the game closed the connection"));
-      });
-    });
+      socket.on("data", (chunk) => { if (this.attempt === attempt) this.onData(chunk); });
+      socket.on("error", fail);
+      socket.on("close", () => fail(new Error("the game closed the connection")));
+    } catch (failure) {
+      fail(failure);
+    }
+    return promise;
   }
 
   onData(chunk) {
@@ -199,7 +244,12 @@ class Connection {
    *   that waits in the game should be given longer than its own timeout
    */
   async call(op, args = {}, timeoutMs = 60000) {
-    await this.connect();
+    const connecting = this.connect();
+    const attempt = this.attempt;
+    await connecting;
+    if (this.attempt !== attempt || !attempt.connected || attempt.socket.destroyed) {
+      throw new Error("the connection closed before the request was sent");
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -207,13 +257,28 @@ class Connection {
         reject(new Error(`no answer to ${op} within ${timeoutMs}ms`));
       }, timeoutMs);
       this.waiting.set(id, { resolve, reject, timer });
-      this.socket.write(JSON.stringify({ id, token: this.endpoint.token, op, args }) + "\n");
+      try {
+        attempt.socket.write(JSON.stringify({ id, token: this.endpoint.token, op, args }) + "\n");
+      } catch (failure) {
+        this.waiting.delete(id);
+        clearTimeout(timer);
+        reject(failure);
+      }
     });
   }
 
   close() {
-    if (this.socket) this.socket.destroy();
+    const attempt = this.attempt;
+    this.attempt = null;
     this.socket = null;
+    this.connecting = null;
+    this.buffer = "";
+    const failure = new Error("the connection was closed");
+    if (attempt) {
+      attempt.reject(failure);
+      if (attempt.socket) attempt.socket.destroy();
+    }
+    this.failAll(failure);
   }
 }
 
@@ -244,7 +309,9 @@ class Puppet {
     const wrong = mismatch(live);
     if (wrong) throw new Error(wrong);
     const held = this.connections.get(sideName);
-    if (held && held.endpoint.token === live.token && held.socket) return held;
+    if (held && held.endpoint.token === live.token && held.endpoint.port === live.port
+      && held.endpoint.protocol === live.protocol && held.endpoint.pid === live.pid
+      && sameDir(held.endpoint.dir, live.dir)) return held.connect();
     if (held) held.close();
     const fresh = new Connection(live);
     this.connections.set(sideName, fresh);
@@ -253,7 +320,14 @@ class Puppet {
 
   async call(side, op, args, timeoutMs) {
     const waits = args && args.timeout_ms ? Number(args.timeout_ms) + 10000 : undefined;
-    return (await this.side(side)).call(op, args || {}, timeoutMs || waits);
+    const finding = this.side(side);
+    const held = this.connections.get(side);
+    const attempt = held && held.attempt;
+    const connection = await finding;
+    if (connection !== held || this.connections.get(side) !== held || connection.attempt !== attempt) {
+      throw new Error("the connection closed before the request was sent");
+    }
+    return connection.call(op, args || {}, timeoutMs || waits);
   }
 
   close() {
@@ -262,4 +336,4 @@ class Puppet {
   }
 }
 
-module.exports = { discover, Connection, Puppet, parseSide, named, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };
+module.exports = { discover, sameDir, Connection, Puppet, parseSide, named, placesUnder, PROTOCOLS, mismatch, consentFile, readAllowed, setAllowed };

@@ -102,6 +102,12 @@ public final class Ops {
         this.gameThread = gameThread;
         this.waiter = waiter;
         now("help", "{}", "Every operation this side answers to, with its arguments.", args -> help());
+        now("lifecycle", "{since?: seq, names?: \"server.ready,client.connect_failed\", limit?: 50}",
+                "What the game, the server and the launcher did, numbered, as in config events.jsonl: starts, "
+                        + "stops, crashes, joins and failed connects. Only what the \"events\" block of "
+                        + "config/mc_puppet.json lets through; \"recording\": false means none are kept. Take "
+                        + "\"sequence\" and ask \"since\" it. (Chat and toasts are \"events\" on the client.)",
+                Events::operation);
         add("wait_until",
                 "{op, args?, path?, equals|not|contains|matches|gt|gte|lt|lte|exists, timeout_ms?: 30000}",
                 "Runs an operation once a tick until its answer meets the expectation, then returns the answer "

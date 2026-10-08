@@ -5,6 +5,8 @@
   "minVersion": "0.8",
   "client": [
     "BossBarHudAccessor",
+    "ClientPlayerInteractionManagerInvoker",
+    "compat.DisconnectedScreenAccessor",
     "DrawContextMixin",
     "GameRendererMixin",
     "HandledScreenAccessor",
@@ -14,13 +16,17 @@
     "KeyboardInvoker",
     "MerchantScreenAccessor",
     "MinecraftClientInvoker",
+    "MinecraftClientMixin",
     "MouseInvoker",
+    "MouseMixin",
     "ScreenMixin",
     "SliderWidgetAccessor",
     "SystemToastAccessor",
     "ToastManagerMixin"
   ],
-  "mixins": [],
+  "mixins": [
+    "CrashReportMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

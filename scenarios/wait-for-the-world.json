@@ -1,0 +1,9 @@
+{
+  "name": "a client that was started joins the world without a crash or a failed connect",
+  "note": "Uses the lifecycle events (README, 'Lifecycle events'), so it needs a client started by puppet launch (puppet launch client, or with --server localhost:25565). It waits for client.connected and fails at once on any *.crash, *.connect_failed or a non-zero process.exited. Written from the scenario step's description in tools/puppet/scenario.js; NOT run against a game.",
+  "steps": [
+    { "wait_event": "client.connected", "fail_on": "*.crash,*.connect_failed", "timeout": 120, "show": true },
+    { "side": "client", "op": "info",
+      "expect": [ { "path": "in_world", "equals": true } ] }
+  ]
+}
