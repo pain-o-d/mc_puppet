@@ -1,16 +1,17 @@
 # Handover
 
-## Now (2026-10-07)
+## Now (2026-10-08)
 
 The short state; dated sections below are history. Rewrite this block, do
 not append to it, in the same commit as the change it describes.
 
-- **Works:** lifecycle events (backlog task 1, slices 1A-1E): `Events` bus, server/client/crash hooks, launcher `process.started/exited`, op `lifecycle`, `puppet wait`/`events` (exit 0 event, 1 failure, 2 timeout or no file), scenario step `wait_event`. Tasks 2 and 3 done. Both builds and unit tests pass.
-- **Seen running (2026-10-07, Fabric 1.21.1 world run):** events.jsonl seq 1-5 (process.started, client.ready, server.ready, client.connected, client.disconnected); scenarios passed (wait-for-the-world 2/2, eyes-and-hands, mouse-drag, focused-input 59/59, trade-with-a-villager 24/24); held input stop/release, break_block and hotbar repair all passed; dedicated server started/stopped cleanly. Task 6 with `events.enabled=["*"]`: player.joined/left and server.stopping/stopped all reached the file, shutdown ones too. Tasks 6-8 done.
-- **Front:** none (tasks 1-11 done and committed).
-- **Uncommitted:** nothing.
-- **Next:** task 11's window-title suffix is built on both versions but not seen in a live client (Yarn `MinecraftClient.getWindowTitle`, `require = 0`, so a miss is silent); check once with `-Dmc_puppet.pretend_production=true`. `prod-check.js` on the other three jars, a client from a real launcher (owner-gated); then release 0.1.3.
-- **Owner:** release 0.1.3, and a live run of the events; develop is ahead of `v0.1.2` by more than one feature.
+- **Works:** lifecycle events (tasks 1-3, 6-8), input ownership, `--client NAME` (task 10), the pretend_production window-title suffix (task 11). Both builds, `npm test` 109/109 and `prod-check --eula` 14/14 on NeoForge 1.21.1 pass.
+- **Seen running (2026-10-08, live run by another agent):** task 11 suffix and its single WARN on Fabric 1.21.1 and Forge 1.20.1. Earlier: events and scenarios on Fabric 1.21.1 (2026-10-07).
+- **Not tried:** `prod-check.js` cannot take the Fabric 1.21.1, Fabric 1.20.1 or Forge 1.20.1 jars (hardcoded to neoforge, lines 34, 61, 78, 83, 198), so those three are not tried outside dev (backlog task 12). `attack-check` was not run for 0.1.3.
+- **Front:** release/0.1.3 prepared (versions bumped, CHANGELOG `## 0.1.3`), committed, not merged.
+- **Uncommitted:** none.
+- **Next:** the owner merges `release/0.1.3` into `main`, tags `v0.1.3`, pushes, publishes (RELEASING.md 2-4).
+- **Owner-gated:** a real launcher client; the three other jars outside dev.
 
 What a session opened in this project needs to know that the code and the git
 log do not say. Written 2026-09-22 from a session held in `../hivemind`, which

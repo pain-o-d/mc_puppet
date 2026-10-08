@@ -14,7 +14,7 @@
                       Wiki     https://github.com/pain-o-d/mc_puppet#readme          (the manual is the README)
     And back          GitHub's "About" box: Website = https://modrinth.com/mod/mc-puppet; topics minecraft, minecraft-mod,
                       fabric, neoforge, forge, testing, mcp, modding. npm's page takes its links from package.json.
-    Version numbers   0.1.2+mc1.20.1-fabric, 0.1.2+mc1.20.1-forge, 0.1.2+mc1.21.1-fabric, 0.1.2+mc1.21.1-neoforge:
+    Version numbers   0.1.3+mc1.20.1-fabric, 0.1.3+mc1.20.1-forge, 0.1.3+mc1.21.1-fabric, 0.1.3+mc1.21.1-neoforge:
                       the loader is part of the number, since Modrinth's Maven finds a file by it and two
                       files under one number is one of them at random. Subtitle: "MC Puppet 0.1.1 — Forge 1.20.1".
                       Each takes its own -sources.jar as a supplementary file of type Sources JAR.
@@ -54,7 +54,7 @@ Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) — those
 **Fabric:** put the jar in `run/mods/`. **Forge and NeoForge:** make it a dependency, so that Loom remaps it — a jar in `run/mods/` is not in the names a dev run uses:
 
 ```groovy
-modLocalRuntime "maven.modrinth:mc-puppet:0.1.2+mc1.20.1-forge"   // or +mc1.21.1-neoforge
+modLocalRuntime "maven.modrinth:mc-puppet:0.1.3+mc1.20.1-forge"   // or +mc1.21.1-neoforge
 ```
 
 Then switch it on with `-Dmc_puppet.enabled=true` or `{"enabled": true}` in `run/config/mc_puppet.json`, and ask it what it can do: `npx mc-puppet client help`. The [manual](https://github.com/pain-o-d/mc_puppet#readme) has the operations, the scenario language and worked examples.

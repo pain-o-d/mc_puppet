@@ -233,3 +233,7 @@ Status: **done** 2026-10-08 (uncommitted at writing): `--client NAME` on `puppet
 ## Task 11 — Say in the window title that a pretend_production client has no exit
 
 Status: **done** 2026-10-08 (uncommitted at writing; unverified in a live game). Follows Task 4: a client started with `-Dmc_puppet.pretend_production=true` has no bridge and must be closed by hand, and now says so in its window title. `MinecraftClientMixin` appends " [MC Puppet: pretend_production, no bridge, close by hand]" to `MinecraftClient#getWindowTitle` at RETURN (`require = 0`) only when the property is set; same Yarn name on 1.20.1 and 1.21.1, so no `compat/` twin. No bridge, consent or config change.
+
+## Task 12 — prod-check for Fabric 1.21.1, Fabric 1.20.1 and Forge 1.20.1 jars
+
+Status: **open**. `tools/prod-check.js` is hardcoded to NeoForge (lines 34, 61, 78, 83, 198), so only the NeoForge 1.21.1 jar has been run in a real server outside a development environment (14/14 on 2026-10-08). Make the loader and game version a parameter and run the fourteen checks on the other three jars.
