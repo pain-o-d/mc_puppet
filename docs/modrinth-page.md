@@ -47,7 +47,7 @@ npx mc-puppet run scenarios/trade.json --junit results.xml  # a whole test, for 
 - **For AI coding agents:** an MCP server, `npx mc-puppet mcp`, five tools wide. The agent that wrote the screen can look at it.
 - **Your mod can answer too:** register operations of your own, `yourmod:something`, and let tests ask for your mod's state as data instead of reading it off a screen.
 
-Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) — those two versions exactly, one mod version for all four. Needs [Architectury API](https://modrinth.com/mod/architectury-api), and on Fabric [Fabric API](https://modrinth.com/mod/fabric-api). The command line tools are a separate, dependency-free npm package, [`mc-puppet`](https://www.npmjs.com/package/mc-puppet).
+Minecraft **1.21.1** (Fabric, NeoForge) and **1.20.1** (Fabric, Forge) — those two versions exactly, one mod version for all four. Needs [Architectury API](https://modrinth.com/mod/architectury-api), and on Fabric [Fabric API](https://modrinth.com/mod/fabric-api). The command line tools are a separate, dependency-free npm package, `mc-puppet` (on npm).
 
 ## In a development environment
 
