@@ -22,4 +22,17 @@ public abstract class MinecraftClientMixin {
             info.setReturnValue(true);
         }
     }
+
+    /**
+     * A game started with {@code -Dmc_puppet.pretend_production=true} has no bridge, so nothing
+     * can ask it to quit; say so in the window title (Task 11). Injected into the getter rather
+     * than set once on the window, because the game rewrites the title when a world is joined or
+     * left. Reads the existing property and nothing else; it only adds words.
+     */
+    @Inject(method = "getWindowTitle", at = @At("RETURN"), cancellable = true, require = 0)
+    private void mc_puppet$saySoInTheTitle(CallbackInfoReturnable<String> info) {
+        if (Boolean.getBoolean("mc_puppet.pretend_production")) {
+            info.setReturnValue(info.getReturnValue() + " [MC Puppet: pretend_production, no bridge, close by hand]");
+        }
+    }
 }
