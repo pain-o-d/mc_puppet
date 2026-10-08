@@ -5,9 +5,18 @@ the same features and the same protocol on every game it is built for.
 
 ## Unreleased
 
-- A client started with `-Dmc_puppet.pretend_production=true` shows "[MC Puppet: pretend_production, no bridge, close by hand]" in its window title.
-- A game started with `-Dmc_puppet.pretend_production=true` logs one warning that its bridge is intentionally off and the window must be closed by hand.
-- Lifecycle events: server and client hooks (server started/stopping/stopped/crash, client connecting/connected/connect_failed/disconnected/crash, player joined/left) feed the events bus.
+## 0.1.3
+
+2026-10-08. A beta.
+
+### Events
+
+- **Lifecycle events** feed the events bus: server (started, stopping,
+  stopped, crash), client (connecting, connected, connect_failed,
+  disconnected, crash) and player joined/left.
+
+### Input
+
 - Temporal client input has one scoped owner; stop, release, context changes
   and timeout revoke pending callbacks and clear owned held/queued presses.
   Holding attack or use works behind other windows with normal vanilla rules.
@@ -15,23 +24,6 @@ the same features and the same protocol on every game it is built for.
   repairing a stale server hand without changing its arguments or null result.
 - `break_block` uses one ordinary owned attack-binding path and observes native
   ticks, avoiding competing manual and vanilla mining progression.
-
-- The dev launcher optionally hands detached Gradle build ownership to an external
-  mutex supervisor; timeout/failure preserves the child lease until build readiness
-  or proved completion, including a surviving Gradle daemon.
-- Wrapper and Gradle write separate owned lease records, preserving daemon PID
-  and phase when exit/configuration callbacks overlap. The supervisor validates
-  their identities and retains missing or uncertain build ownership.
-- `launch --init-script <file.gradle>` accepts repeated explicit readable init
-  files, preserving path spaces and order beside the launcher's own hook, so
-  consumer pack dependencies can use the same supervised launch.
-- Parallel first Node requests share one pending connection. Closing rejects
-  pending connects/requests and destroys their socket; retired socket events
-  cannot affect a fresh connection, and endpoint restart preserves isolation.
-  Verified by ten real loopback TCP regressions and 16 cold concurrent native
-  server-block reads in a production NeoForge consumer; protocol 1 and the
-  bridge's eight-connection limit remain unchanged.
-
 - **`mouse_drag`: a mouse button held in the world while the mouse moves.**
   Presses a button (the one `use` is on, by default), moves the mouse by
   degrees of turn at the player's sensitivity or by window pixels over so
@@ -40,23 +32,26 @@ the same features and the same protocol on every game it is built for.
   Aeronautics/Simulated's physics assembler lever, a throttle lever, a
   steering wheel. `hold {keys: [use]}` presses the binding and moves nothing.
   Asked for by `../tycoon` (its backlog 143) for `../stockyard-create`.
-
 - **A drag is heard behind other windows.** Minecraft takes mouse movement
   only while its window has focus, and since 1.20.5 hands a screen its drag
   only then: by the game's code, `drag` over slots in a window without focus
   on 1.21.1 was a click on the last slot (read, not seen). While a test's
   button is down the game is told its window has focus (the real cursor is
-  not grabbed), and each move waits for a frame to take the last. `drag` takes `steps`, cutting each leg into
-  so many moves. `window {focused}` tells the game its window gained or lost
-  focus; `window` and `info` say which it believes.
+  not grabbed), and each move waits for a frame to take the last. `drag` takes
+  `steps`, cutting each leg into so many moves. `window {focused}` tells the
+  game its window gained or lost focus; `window` and `info` say which it
+  believes.
 
-- **`watch` measures a walk's likeness, not only its defects.**
-  `sideways_share`, `accel_p95`, `accel_over`, `stops`, `pace_cv_median`,
-  `pace_cv_p95`, `neighbour_mean`, `neighbour_cv`: what a vanilla crowd's
-  walk is in numbers, so that a mod's crowd can be held to it. For
-  `../hivemind`'s requirement that a member in a group walks as the mob
-  walks on its own.
+### Watching motion
 
+- **`watch`: motion as numbers.** On either side, the entities every tick for
+  up to a minute, and what a screenshot cannot hold: blinks, jumps, sharp turns,
+  sliding (moving with still legs), floating, buried, overlaps, and on the
+  client the frame rate and frame times while it watched; the worst case of each
+  with the entity's last ten ticks. The client counts what the renderer would
+  draw. Written for `../hivemind`, where it found in a minute what weeks of
+  scenarios checking the server had not: ghosts that slid, a crowd that jumped
+  when it became a picture and back, a member that turned round in one tick.
 - **`watch` sees the twitching.** `reversals`, `wobbles`, `pace_mean` and
   `pace_cv` between ticks, `backwards` and `sideways` (the body against the
   motion), `head_askew` (the head against the body), `bursts` (a step twice
@@ -68,15 +63,14 @@ the same features and the same protocol on every game it is built for.
   their group had let go and nobody placed, drawn sliding from their last
   tick's place and snapping back every frame. 1104 frame reversals in 600
   frames before, 0 after.
+- **`watch` measures a walk's likeness, not only its defects.**
+  `sideways_share`, `accel_p95`, `accel_over`, `stops`, `pace_cv_median`,
+  `pace_cv_p95`, `neighbour_mean`, `neighbour_cv`: what a vanilla crowd's
+  walk is in numbers, so that a mod's crowd can be held to it. For
+  `../hivemind`'s requirement that a member in a group walks as the mob
+  walks on its own.
 
-- **`watch`: motion as numbers.** On either side, the entities every tick for
-  up to a minute, and what a screenshot cannot hold: blinks, jumps, sharp turns,
-  sliding (moving with still legs), floating, buried, overlaps, and on the
-  client the frame rate and frame times while it watched; the worst case of each
-  with the entity's last ten ticks. The client counts what the renderer would
-  draw. Written for `../hivemind`, where it found in a minute what weeks of
-  scenarios checking the server had not: ghosts that slid, a crowd that jumped
-  when it became a picture and back, a member that turned round in one tick.
+### Several clients and servers
 
 - **Clients that join a server, and as many of them as a test needs.**
   `join_server {address}` connects a client, and `wait {for: world}` after it
@@ -92,14 +86,41 @@ the same features and the same protocol on every game it is built for.
   `stop` takes names. Seen on all four targets, 1.21.1 against a real server on
   another machine; `scenarios/two-clients-one-server.json` is the worked example,
   and the first time two games ran in one scenario.
+- `puppet wait` and `puppet events` take `--client NAME` to read one named
+  client's events file.
 - `info` says the player's `username`, and `entities` gives a player's `name`.
+- `stop` asks each game by its own connection. With several clients up it asked
+  the newest one as many times as there were clients.
+
+### Safety hint
+
+- A client started with `-Dmc_puppet.pretend_production=true` shows
+  "[MC Puppet: pretend_production, no bridge, close by hand]" in its window
+  title, and any game started that way logs one warning that its bridge is
+  intentionally off and the window must be closed by hand. Seen on Fabric 1.21.1
+  and Forge 1.20.1.
+
+### Tooling
+
+- The dev launcher optionally hands detached Gradle build ownership to an
+  external mutex supervisor; timeout/failure preserves the child lease until
+  build readiness or proved completion, including a surviving Gradle daemon.
+- Wrapper and Gradle write separate owned lease records, preserving daemon PID
+  and phase when exit/configuration callbacks overlap. The supervisor validates
+  their identities and retains missing or uncertain build ownership.
+- `launch --init-script <file.gradle>` accepts repeated explicit readable init
+  files, preserving path spaces and order beside the launcher's own hook, so
+  consumer pack dependencies can use the same supervised launch.
+- Parallel first Node requests share one pending connection. Closing rejects
+  pending connects/requests and destroys their socket; retired socket events
+  cannot affect a fresh connection, and endpoint restart preserves isolation.
+  Verified by ten real loopback TCP regressions and 16 cold concurrent native
+  server-block reads in a production NeoForge consumer; protocol 1 and the
+  bridge's eight-connection limit remain unchanged.
 - `launch` on Windows writes the log it points at. Started detached through
   `cmd`, Gradle's output was lost and the file was always empty, so a launch
   that failed said "see the log" about nothing. The wrapper's jar is now run by
   Java directly.
-- `stop` asks each game by its own connection. With several clients up it asked
-  the newest one as many times as there were clients.
-
 - The `-sources.jar` of each build holds the sources of what is in the jar. Those of
   0.1.1 and 0.1.2 held one file of forty-four, the loader's entry point: the
   common module, which is where the bridge is, was left out. Read the code in the
