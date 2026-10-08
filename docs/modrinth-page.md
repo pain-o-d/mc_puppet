@@ -26,7 +26,7 @@
 
 ---
 
-**A tool for people who make mods.** If you are here because a modpack has it: it does nothing on your machine unless you switch it on yourself, and you can remove it. [Why it is safe to have installed](#is-it-safe) is below.
+**A tool for people who make mods.** If you are here because a modpack has it: it does nothing on your machine unless you switch it on yourself, and you can remove it. Why it is safe to have installed is explained below, under "Is it safe?".
 
 # See and drive a running Minecraft, from a program
 
@@ -75,4 +75,4 @@ It was reviewed before release by somebody other than its author, told to be hos
 
 ## Beta
 
-Used so far by one mod's test suite. Seen working: scenarios on all four targets in development environments, and the built jar in a real NeoForge 1.21.1 server. **Not yet tried:** the other three jars outside a development environment, and a real client from an ordinary launcher. The protocol and the scenario language may change before 1.0.0, so pin an exact version of the mod and of the tools. Reports are welcome on [GitHub](https://github.com/pain-o-d/mc_puppet/issues).
+Used so far by one mod's test suite. Seen working: scenarios on all four targets in development environments, and the built jar in a real NeoForge 1.21.1 server. **Not yet tried:** the other three jars outside a development environment, and a real client from an ordinary launcher. The protocol and the scenario language may change before 1.0.0, so pin an exact version of the mod and of the tools. Reports are welcome on [GitHub](https://github.com/pain-o-d/mc_puppet) (Issues tab).
